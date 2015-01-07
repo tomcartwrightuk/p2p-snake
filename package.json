@@ -1,0 +1,28 @@
+{
+  "name": "webrtc-ruby",
+  "version": "1.0.0",
+  "description": "A webrtc-powered snake game.",
+  "main": "lib/js/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "github.com/tomcartwrightuk/webrtc-ruby"
+  },
+  "keywords": [
+    "webrtc",
+    "peer-to-peer"
+  ],
+  "author": "Tom Cartwright",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/tomcartwrightuk/webrtc-ruby/issues"
+  },
+  "homepage": "https://github.com/tomcartwrightuk/webrtc-ruby",
+  "dependencies": {
+    "browserify": "^8.0.3",
+    "simple-peer": "^3.6.9",
+    "watchify": "^2.2.1"
+  }
+}
