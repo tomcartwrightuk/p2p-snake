@@ -8,6 +8,7 @@ var ws = new WebSocket(protocol + host);
 var peer, peerId;
 var Snake = require('./snake');
 var SnakeGame = require('./snake_game');
+var $ = require('jquery');
 var initiator;
 
 ws.onmessage = function(event) {
@@ -35,13 +36,14 @@ function setupListeners (peer) {
 
   peer.on('ready', function() {
     console.log('I am ready');
+    $('.intro').hide();
     var snake1 = new Snake(initiator)
     var snake2 = new Snake()
     var snakegame = new SnakeGame(snake1, snake2, initiator, peer);
   });
 }
 
-},{"./snake":2,"./snake_game":3,"simple-peer":5}],2:[function(require,module,exports){
+},{"./snake":2,"./snake_game":3,"jquery":4,"simple-peer":5}],2:[function(require,module,exports){
 var Snake = function(initiator) {
   this.initiator = initiator;
   this.score = 0;
