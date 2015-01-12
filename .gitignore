@@ -3,4 +3,3 @@ node_modules
 *.swo
 *.swn
 .DS_Store
-public/bundle.js
