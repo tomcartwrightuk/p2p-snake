@@ -56,6 +56,7 @@ run lambda { |env|
     ws.on :close do |event|
       connected_clients -= 1
       clients.delete(ws.__id__)
+      waiting_id = nil if ws.__id__ == waiting_id
     end
 
     # Return async Rack response
