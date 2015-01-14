@@ -47,6 +47,7 @@ run lambda { |env|
       when 'signal'
         to_peer_id = msg['data']['to_peer_id']
         peer = clients[to_peer_id]
+        log_signal(event)
         peer.send(event.data)
       else
         p 'Unexpected event' 
@@ -69,3 +70,8 @@ run lambda { |env|
     end
   end
 }
+
+def log_signal(event)
+  p JSON.parse(event.data)['data']['signal_data']
+  puts ''
+end
