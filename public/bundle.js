@@ -53,10 +53,11 @@ Snake.prototype.createSnake = function () {
   var length = 5; //Length of the snake
   this.snake_arr = [];
   for(var i = length-1; i >= 0; i--) {
-    //This will create a horizontal snake starting from the top left
     if (this.initiator) {
+      // Creates a horizontal snake starting from the top left
       this.snake_arr.push({x: i, y:0});
     } else {
+      // Creates a horizontal snake starting from the bottom left
       this.snake_arr.push({x: i, y: 49})
     }
   }
@@ -70,12 +71,11 @@ var $ = require('jquery');
 * Snake game code inspired from
 * http://thecodeplayer.com/walkthrough/html5-game-tutorial-make-a-snake-game-using-html5-canvas-jquery
 * and butchered appropriately.
-* Works by drawing a canvas, and rendering blocks of width cw in 60ms intervals
+* Works by drawing a canvas, and rendering blocks of width cw in loopTime ms intervals
 *
 * Two player game works by
-* - initiating peer is time keeper, every 60ms they send state of snake and food and recieve state of other snake
+* - initiating peer is time keeper, every loopTime ms they send state of snake and food and recieve state of other snake
 * - on receiving data from other player, the client paints the canvas
-* - restart event is send by one or other players
 */
 
 var SnakeGame = function(snake1, snake2, initiator, socket) {
@@ -96,14 +96,10 @@ var SnakeGame = function(snake1, snake2, initiator, socket) {
       if (!self.initiator) self.paint();
     }
   })
-  
-  // Lets save the cell width in a variable for easy control
   this.cw = 10;
+  this.loopTime = 150;
   this.d;
   this.food;
-  
-  // this.snake1 = new Snake;
-  // this.snake2 = new Snake(socket);
   
   this.init = function() {
     self.d = "right"; //default direction
@@ -115,7 +111,7 @@ var SnakeGame = function(snake1, snake2, initiator, socket) {
       if (typeof game_loop != "undefined") clearInterval(game_loop);
       game_loop = setInterval(
         self.paint.bind(self)
-      , 150);
+      , self.loopTime);
     }
   }
   this.init();
