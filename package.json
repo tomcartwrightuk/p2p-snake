@@ -22,8 +22,12 @@
   "homepage": "https://github.com/tomcartwrightuk/webrtc-ruby",
   "dependencies": {
     "browserify": "^8.0.3",
+    "express": "^4.12.3",
     "jquery": "^2.1.3",
-    "simple-peer": "^3.6.9",
+    "socket.io": "^1.3.5",
+    "socket.io-client": "^1.3.5",
+    "socket.io-p2p": "^1.1.2",
+    "socket.io-p2p-server": "^1.0.3",
     "watchify": "^2.2.1"
   }
 }
