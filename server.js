@@ -1,3 +1,4 @@
+var port = process.env.PORT || 3030
 var express = require('express')
 var app = express()
 var server = require('http').Server(app)
@@ -14,8 +15,8 @@ var clients = {}
 
 // io.use(p2pserver)
 
-server.listen(3030, function() {
-  console.log("Listening on 3030");
+server.listen(port, function() {
+  console.log("Listening on %s", port);
 });
 
 io.on('connection', function(socket) {
@@ -30,42 +31,11 @@ io.on('connection', function(socket) {
     rooms[rooms.length - 1].full = true
   }
   socket.join(room.name)
+  socket.on('error', function (err) {
+    console.log("Error %s", err);
+  })
 
-  function p2pSocket (socket, room, next) {
-    var connectedClients = clients
-    if (room) {
-      io.to(room).emit('connected_peer', socket.id)
-      connectedClients = io.nsps['/'].adapter.rooms[room.name]
-    }
-    socket.emit('numClients', Object.keys(connectedClients).length - 1)
-    clients[socket.id] = socket
-
-    socket.on('disconnect', function () {
-      delete clients[socket.id]
-      debug('Client gone (id=' + socket.id + ').')
-    })
-
-    socket.on('offers', function (data) {
-      // send offers to everyone in a given room
-      Object.keys(connectedClients).forEach(function (clientId, i) {
-        var client = clients[clientId]
-        if (client !== socket) {
-          var offerObj = data.offers[i]
-          var emittedOffer = {fromPeerId: socket.id, offerId: offerObj.offerId, offer: offerObj.offer}
-          debug('Emitting offer: %s', JSON.stringify(emittedOffer))
-          client.emit('offer', emittedOffer)
-        }
-      })
-    })
-
-    socket.on('peer-signal', function (data) {
-      var toPeerId = data.toPeerId
-      var client = clients[toPeerId]
-      client.emit('peer-signal', data)
-    })
-    typeof next === 'function' && next()
-  }
-  p2pSocket(socket, room)
+  p2pserver(socket, null, room)
 
   var numClients = Object.keys(io.nsps['/'].adapter.rooms[room.name]).length
   if (numClients == 2) {
