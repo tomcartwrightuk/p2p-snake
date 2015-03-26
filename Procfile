@@ -1,1 +1,1 @@
-thin start -R config.ru
+web: node server.js
