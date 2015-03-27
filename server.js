@@ -9,36 +9,64 @@ var debug = require('debug')
 var hat = require('hat')
 app.use(express.static(__dirname+'/public'))
 
-var waitingId;
 var rooms = []
 var clients = {}
-
-// io.use(p2pserver)
 
 server.listen(port, function() {
   console.log("Listening on %s", port);
 });
 
 io.on('connection', function(socket) {
-  var lastRoom = rooms[rooms.length - 1]
-  // (no rooms exists, room exists is full), room exists needs joining
-  if (!lastRoom || lastRoom.full) {
-    // create new room
-    var room = {full: false, name: hat()}
-    rooms.push(room)
-  } else {
-    var room = lastRoom
-    rooms[rooms.length - 1].full = true
-  }
+  clients[socket.id] = socket
+  var room = findOrCreateRoom()
   socket.join(room.name)
+  room.players++
+  console.log("joined %s", room.name);
+  console.log(rooms);
   socket.on('error', function (err) {
     console.log("Error %s", err);
   })
 
   p2pserver(socket, null, room)
 
+  socket.on('disconnect', function () {
+    delete clients[socket.id]
+    removePlayerOrRoom(room)
+    io.to(room.name).emit('disconnected-player')
+    // Move opponents to new rooms
+    var opponents = io.nsps['/'].adapter.rooms[room.name]
+    if (opponents) {
+      Object.keys(opponents).forEach(function (clientId, i) {
+        room = findEmptyRoom()
+        if (clients[clientId]) {
+          clients[clientId].join(room.name)
+        }
+      })
+    }
+  })
+
   var numClients = Object.keys(io.nsps['/'].adapter.rooms[room.name]).length
   if (numClients == 2) {
     socket.emit('initiator', 'true')
   }
 })
+
+function findOrCreateRoom () {
+  var lastRoom = findEmptyRoom()
+  if (!lastRoom || lastRoom.full) {
+    var room = {players: 0, name: hat()}
+    rooms.push(room)
+    return room
+  }
+  return lastRoom
+}
+
+function findEmptyRoom() {
+  return rooms.filter(function(room) { return room.players === 1 })[0];
+}
+
+function removePlayerOrRoom (room) {
+  var roomIdx = rooms.indexOf(room)
+  rooms[roomIdx].players--
+  if (rooms[roomIdx].players === 0) rooms.splice(room)
+}

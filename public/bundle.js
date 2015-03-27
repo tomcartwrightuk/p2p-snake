@@ -6,21 +6,34 @@ var SnakeGame = require('./snake_game');
 var $ = require('jquery');
 var peerOpts = {numClients: 1}
 var initiator
+var snakeGame
 
 var manager = io.Manager();
 var socket = manager.socket('/')
 var p2psocket = new Socketiop2p(peerOpts, socket)
 
 p2psocket.on('initiator', function (msg) {
+  console.log("intialtor");
   initiator = true
 })
 
 p2psocket.on('ready', function () {
+  console.log("ready index");
   p2psocket.useSockets = false
   $('.intro').hide()
+  $('#canvas').show()
   var snake1 = new Snake(initiator)
   var snake2 = new Snake()
-  var snakegame = new SnakeGame(snake1, snake2, initiator, p2psocket)
+  snakegame = new SnakeGame(snake1, snake2, initiator, p2psocket)
+})
+
+p2psocket.on('disconnected-player', function () {
+  console.log("dis");
+  snakegame = undefined
+  initiator = undefined
+  p2psocket._peers = {}
+  $('.intro').show()
+  $('#canvas').hide()
 })
 
 },{"./snake":"/Users/tom/code/socket-io/p2p-snake/lib/js/snake.js","./snake_game":"/Users/tom/code/socket-io/p2p-snake/lib/js/snake_game.js","jquery":"/Users/tom/code/socket-io/p2p-snake/node_modules/jquery/dist/jquery.js","socket.io-client":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/index.js","socket.io-p2p":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/index.js"}],"/Users/tom/code/socket-io/p2p-snake/lib/js/snake.js":[function(require,module,exports){
@@ -32,6 +45,7 @@ var Snake = function(initiator) {
 Snake.prototype.createSnake = function () {
   var length = 5; //Length of the snake
   this.snake_arr = [];
+  console.log("cretae nakse initiator %s", this.initiator);
   for(var i = length-1; i >= 0; i--) {
     if (this.initiator) {
       // Creates a horizontal snake starting from the top left
@@ -17157,13 +17171,14 @@ function toArray(list, index) {
 }
 
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/index.js":[function(require,module,exports){
+window.myDebug = require("debug");
 var Peer = require('simple-peer')
 var Emitter = require('component-emitter')
 var parser = require('socket.io-parser')
 var toArray = require('to-array')
 var hasBin = require('has-binary')
 var bind = require('component-bind')
-var debug = require('debug')('socket')
+var debug = require('debug')('socket.io-p2p')
 var hat = require('hat')
 var extend = require('extend.js')
 
@@ -17188,6 +17203,7 @@ function Socketiop2p (opts, socket) {
                  }
 
   socket.on('numClients', function (numClients) {
+    console.log("numclients");
     self.peerId = socket.io.engine.id
     self.numConnectedClients = numClients
     generateOffers(function (offers) {
@@ -17267,6 +17283,8 @@ function Socketiop2p (opts, socket) {
   })
 
   self.on('peer_ready', function (peer) {
+    console.log("Peer ready");
+    console.log(self._peers);
     self.readyPeers++
     if (self.readyPeers === self.numConnectedClients) {
       self.emit('ready')
@@ -20150,7 +20168,7 @@ function isUndefined(arg) {
 },{}],"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/inherits/inherits_browser.js":[function(require,module,exports){
 arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/inherits/inherits_browser.js"][0].apply(exports,arguments)
 },{}],"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/isarray/index.js":[function(require,module,exports){
-arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/node_modules/isarray/index.js"][0].apply(exports,arguments)
+arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/node_modules/isarray/index.js"][0].apply(exports,arguments)
 },{}],"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/process/browser.js":[function(require,module,exports){
 // shim for using process in browser
 
