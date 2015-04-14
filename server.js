@@ -35,10 +35,11 @@ io.on('connection', function(socket) {
     io.to(room.name).emit('disconnected-player')
     // Move opponents to new rooms
     var opponents = io.nsps['/'].adapter.rooms[room.name]
-    if (opponents) {
+    if (opponents) { // in case both players leave at the same time
       Object.keys(opponents).forEach(function (clientId, i) {
         room = findEmptyRoom()
-        if (clients[clientId]) {
+        if (clients[clientId] && room) {
+          socket.emit('initiator', 'true')
           clients[clientId].join(room.name)
         }
       })
@@ -55,8 +56,7 @@ function findOrCreateRoom () {
   var lastRoom = findEmptyRoom()
   if (!lastRoom || lastRoom.full) {
     var room = {players: 0, name: hat()}
-    rooms.push(room)
-    return room
+    return rooms.push(room)
   }
   return lastRoom
 }
@@ -66,7 +66,6 @@ function findEmptyRoom() {
 }
 
 function removePlayerOrRoom (room) {
-  var roomIdx = rooms.indexOf(room)
-  rooms[roomIdx].players--
-  if (rooms[roomIdx].players === 0) rooms.splice(room)
+  room.players--
+  if (room.players === 0) rooms.splice(room)
 }
