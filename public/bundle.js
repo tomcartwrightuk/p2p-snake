@@ -7,29 +7,39 @@ var $ = require('jquery');
 var peerOpts = {numClients: 1}
 var initiator
 var snakeGame
+var snake1
+var snake2
 
 var manager = io.Manager();
 var socket = manager.socket('/')
 var p2psocket = new Socketiop2p(peerOpts, socket)
 
+socket.on('connect', function (data) {
+  $('.intro').hide()
+  $('#canvas').show()
+  snake1 = new Snake(initiator)
+  snake2 = new Snake()
+  snakeGame = new SnakeGame(snake1, snake2, true, socket)
+})
+
 p2psocket.on('initiator', function (msg) {
-  console.log("intialtor");
   initiator = true
 })
 
 p2psocket.on('ready', function () {
-  console.log("ready index");
   p2psocket.useSockets = false
   $('.intro').hide()
   $('#canvas').show()
-  var snake1 = new Snake(initiator)
-  var snake2 = new Snake()
-  snakegame = new SnakeGame(snake1, snake2, initiator, p2psocket)
+  snake1 = new Snake(initiator)
+  snake2 = new Snake()
+  snakeGame = new SnakeGame(snake1, snake2, initiator, p2psocket)
 })
 
 p2psocket.on('disconnected-player', function () {
-  console.log("dis");
-  snakegame = undefined
+  clearInterval(snakeGame.game_loop)
+  snakeGame = undefined
+  snake1 = undefined
+  snake2 = undefined
   initiator = undefined
   p2psocket._peers = {}
   $('.intro').show()
@@ -40,12 +50,13 @@ p2psocket.on('disconnected-player', function () {
 var Snake = function(initiator) {
   this.initiator = initiator;
   this.score = 0;
+  this.snake_arr = [];
 }
 
 Snake.prototype.createSnake = function () {
   var length = 5; //Length of the snake
   this.snake_arr = [];
-  console.log("cretae nakse initiator %s", this.initiator);
+  this.resetScore();
   for(var i = length-1; i >= 0; i--) {
     if (this.initiator) {
       // Creates a horizontal snake starting from the top left
@@ -56,7 +67,11 @@ Snake.prototype.createSnake = function () {
     }
   }
 }
-  
+
+Snake.prototype.resetScore = function () {
+  this.score = 0
+}
+
 module.exports = Snake
 
 },{}],"/Users/tom/code/socket-io/p2p-snake/lib/js/snake_game.js":[function(require,module,exports){
@@ -77,7 +92,7 @@ var SnakeGame = function(snake1, snake2, initiator, socket) {
   var self = this;
   this.canvas = $("#canvas")[0];
   this.ctx = canvas.getContext("2d");
-  this.w = $(window).width()
+  this.w = $(window).width() - 30
   this.h = Math.round(this.w / 2)
   canvas.width = this.w
   canvas.height = this.h
@@ -99,14 +114,15 @@ var SnakeGame = function(snake1, snake2, initiator, socket) {
   this.food;
 
   this.init = function() {
+    // TODO move to snake module
     self.d = "right"; //default direction
     self.snake1.createSnake();
 
     // paint every 60ms
     if (self.initiator) {
       self.createFood(); //Now we can see the food particle
-      if (typeof game_loop != "undefined") clearInterval(game_loop);
-      game_loop = setInterval(
+      if (typeof self.game_loop != "undefined") clearInterval(self.game_loop);
+      self.game_loop = setInterval(
         self.paint.bind(self)
       , self.loopTime);
     }
@@ -124,10 +140,8 @@ SnakeGame.prototype.createFood = function() {
 
 SnakeGame.prototype.paint = function() {
   // To avoid the snake trail paint background every frame
-  this.ctx.fillStyle = "white";
+  this.ctx.fillStyle = "black";
   this.ctx.fillRect(0, 0, this.w, this.h);
-  this.ctx.strokeStyle = "black";
-  this.ctx.strokeRect(0, 0, this.w, this.h);
 
   // get reference to head cell
   var nx = this.snake1.snake_arr[0].x;
@@ -141,7 +155,7 @@ SnakeGame.prototype.paint = function() {
   else if(this.d == "down") ny++;
 
   // This will restart the game if the snake hits the wall or it's body
-  if (nx == -1 || nx == this.w / this.cw || ny == -1 || ny == this.h / this.cw || this.check_collision(nx, ny, this.snake1.snake_arr)) {
+  if (nx == -1 || nx == this.w / this.cw || ny == -1 || ny == this.h / this.cw || this.check_collision(nx, ny, this.snake1.snake_arr) || this.check_collision(nx, ny, this.snake2.snake_arr)) {
     this.init();
     return;
   }
@@ -171,8 +185,10 @@ SnakeGame.prototype.paint = function() {
   // Paint food
   this.paint_cell(this.food.x, this.food.y);
   // Paint score
-  var score_text = "Your score: " + this.snake1.score + "                 Opponents score: " + this.snake2.score;
-  this.ctx.fillText(score_text, 5, this.h-5);
+  var score_text = "YOU: " + this.snake1.score + "                 THEM: " + this.snake2.score;
+  this.ctx.font = "18px sans-serif"
+  this.ctx.fillStyle = "#BBBBBB"
+  this.ctx.fillText(score_text, 15, this.h-15);
 }
 
 SnakeGame.prototype.paintOpponent = function() {
@@ -183,18 +199,19 @@ SnakeGame.prototype.paintOpponent = function() {
 }
 
 SnakeGame.prototype.paint_cell = function(x, y, op) {
-  this.ctx.fillStyle = "blue";
-  if (op !== undefined) this.ctx.fillStyle = "red";
+  this.ctx.fillStyle = '#7ed321';
+  if (op !== undefined) this.ctx.fillStyle = '#ff004c';
   this.ctx.fillRect(x * this.cw, y * this.cw, this.cw, this.cw);
-  this.ctx.strokeStyle = "white";
+  this.ctx.strokeStyle = this.ctx.fillStyle;
   this.ctx.strokeRect(x * this.cw, y * this.cw, this.cw, this.cw);
 }
 
 SnakeGame.prototype.check_collision = function(x, y, array) {
   //This function will check if the provided x/y coordinates exist
   //in an array of cells or not
-  for (var i = 0; i < array.length; i++) {
-    if (array[i].x == x && array[i].y == y) return true;
+  var arr = array || []
+  for (var i = 0; i < arr.length; i++) {
+    if (arr[i].x == x && arr[i].y == y) return true;
   }
   return false;
 }
