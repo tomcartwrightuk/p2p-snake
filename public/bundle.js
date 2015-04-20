@@ -15,11 +15,8 @@ var socket = manager.socket('/')
 var p2psocket = new Socketiop2p(peerOpts, socket)
 
 socket.on('connect', function (data) {
-  $('.intro').hide()
-  $('#canvas').show()
   snake1 = new Snake(initiator)
-  snake2 = new Snake()
-  snakeGame = new SnakeGame(snake1, snake2, true, socket)
+  snakeGame = new SnakeGame(socket, true, [snake1])
 })
 
 p2psocket.on('initiator', function (msg) {
@@ -27,24 +24,49 @@ p2psocket.on('initiator', function (msg) {
 })
 
 p2psocket.on('ready', function () {
+  resetGame()
   p2psocket.useSockets = false
-  $('.intro').hide()
-  $('#canvas').show()
   snake1 = new Snake(initiator)
   snake2 = new Snake()
-  snakeGame = new SnakeGame(snake1, snake2, initiator, p2psocket)
+  snakeGame = new SnakeGame(p2psocket, initiator, [snake1, snake2])
 })
 
 p2psocket.on('disconnected-player', function () {
+  resetGame()
+  p2psocket._peers = {}
+})
+
+function resetGame () {
   clearInterval(snakeGame.game_loop)
   snakeGame = undefined
   snake1 = undefined
   snake2 = undefined
   initiator = undefined
-  p2psocket._peers = {}
-  $('.intro').show()
-  $('#canvas').hide()
-})
+}
+
+CanvasRenderingContext2D.prototype.wrapText = function (text, x, y, maxWidth, lineHeight) {
+  var lines = text.split("\n");
+
+  for (var i = 0; i < lines.length; i++) {
+    var words = lines[i].split(' ');
+    var line = '';
+    for (var n = 0; n < words.length; n++) {
+      var testLine = line + words[n] + ' ';
+      var metrics = this.measureText(testLine);
+      var testWidth = metrics.width;
+      if (testWidth > maxWidth && n > 0) {
+        this.fillText(line, x, y);
+        line = words[n] + ' ';
+        y += lineHeight;
+      } else {
+        line = testLine;
+      }
+    }
+
+    this.fillText(line, x, y);
+    y += lineHeight;
+  }
+}
 
 },{"./snake":"/Users/tom/code/socket-io/p2p-snake/lib/js/snake.js","./snake_game":"/Users/tom/code/socket-io/p2p-snake/lib/js/snake_game.js","jquery":"/Users/tom/code/socket-io/p2p-snake/node_modules/jquery/dist/jquery.js","socket.io-client":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/index.js","socket.io-p2p":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/index.js"}],"/Users/tom/code/socket-io/p2p-snake/lib/js/snake.js":[function(require,module,exports){
 var Snake = function(initiator) {
@@ -72,6 +94,14 @@ Snake.prototype.resetScore = function () {
   this.score = 0
 }
 
+Snake.prototype.color = function () {
+  if (this.initiator) {
+    return '#ff004c'
+  } else {
+    return '#7ed321'
+  }
+}
+
 module.exports = Snake
 
 },{}],"/Users/tom/code/socket-io/p2p-snake/lib/js/snake_game.js":[function(require,module,exports){
@@ -87,23 +117,22 @@ var $ = require('jquery');
 * - on receiving data from other player, the client paints the canvas
 */
 
-var SnakeGame = function(snake1, snake2, initiator, socket) {
+var SnakeGame = function(socket, initiator, snakes) {
   // Canvas stuff
   var self = this;
+  this.snakes = snakes
   this.canvas = $("#canvas")[0];
   this.ctx = canvas.getContext("2d");
   this.w = $(window).width() - 30
   this.h = Math.round(this.w / 2)
   canvas.width = this.w
   canvas.height = this.h
-  this.snake1 = snake1;
-  this.snake2 = snake2;
   this.initiator = initiator;
   this.socket = socket;
   this.socket.on('message', function(msg) {
     if (msg.type === 'snake_arr') {
-      self.snake2.snake_arr = msg.data
-      self.snake2.score = msg.score
+      self.snakes[1].snake_arr = msg.data
+      self.snakes[1].score = msg.score
       self.food = msg.food
       if (!self.initiator) self.paint();
     }
@@ -116,7 +145,7 @@ var SnakeGame = function(snake1, snake2, initiator, socket) {
   this.init = function() {
     // TODO move to snake module
     self.d = "right"; //default direction
-    self.snake1.createSnake();
+    self.snakes[0].createSnake();
 
     // paint every 60ms
     if (self.initiator) {
@@ -127,7 +156,20 @@ var SnakeGame = function(snake1, snake2, initiator, socket) {
       , self.loopTime);
     }
   }
-  this.init();
+  this.showIntro = function(players, cb) {
+    if (players) {
+      var introText = 'You have been matched with another player\n\n'
+    } else {
+      var introText = ''
+    }
+    this.ctx.font = "24px courier"
+    this.ctx.fillStyle = "#BBBBBB"
+    this.ctx.wrapText("Welcome to p2p snake\n\n" + introText + "Use the arrow keys to move the snake\n\nPlay will start in", 25, 35, 340, 28);
+    setTimeout(function() {
+      cb()
+    }, 2000)
+  }
+  this.showIntro(snakes.length > 0, this.init);
   this.setupKeyListeners();
 }
 
@@ -144,8 +186,8 @@ SnakeGame.prototype.paint = function() {
   this.ctx.fillRect(0, 0, this.w, this.h);
 
   // get reference to head cell
-  var nx = this.snake1.snake_arr[0].x;
-  var ny = this.snake1.snake_arr[0].y;
+  var nx = this.snakes[0].snake_arr[0].x;
+  var ny = this.snakes[0].snake_arr[0].y;
 
   // These were the position of the head cell.
   // increment it to get the new head position
@@ -155,7 +197,8 @@ SnakeGame.prototype.paint = function() {
   else if(this.d == "down") ny++;
 
   // This will restart the game if the snake hits the wall or it's body
-  if (nx == -1 || nx == this.w / this.cw || ny == -1 || ny == this.h / this.cw || this.check_collision(nx, ny, this.snake1.snake_arr) || this.check_collision(nx, ny, this.snake2.snake_arr)) {
+  // TODO refactor into function that checks all collisions
+  if (this.collisionOccurred(nx, ny)) {
     this.init();
     return;
   }
@@ -165,48 +208,56 @@ SnakeGame.prototype.paint = function() {
   // Create a new head instead of moving the tail
   if (nx == this.food.x && ny == this.food.y) {
     var tail = {x: nx, y: ny}; // this is a new head
-    this.snake1.score++;
+    this.snakes[0].score++;
     // Create new food
     this.createFood();
   } else {
-    var tail = this.snake1.snake_arr.pop(); //pops out the last cell
+    var tail = this.snakes[0].snake_arr.pop(); //pops out the last cell
     tail.x = nx; tail.y = ny;
   }
 
-  this.snake1.snake_arr.unshift(tail); //puts back the tail as the first cell
+  this.snakes[0].snake_arr.unshift(tail); //puts back the tail as the first cell
 
-  this.socket.emit('message', {type: 'snake_arr', data: this.snake1.snake_arr, score: this.snake1.score, food: this.food})
-  this.paintOpponent();
-  for (var i = 0; i < this.snake1.snake_arr.length; i++) {
-    var c = this.snake1.snake_arr[i];
-    this.paint_cell(c.x, c.y);
-  }
+  this.socket.emit('message', {type: 'snake_arr', data: this.snakes[0].snake_arr, score: this.snakes[0].score, food: this.food})
+  this.paintSnakes(this.snakes);
 
   // Paint food
   this.paint_cell(this.food.x, this.food.y);
   // Paint score
-  var score_text = "YOU: " + this.snake1.score + "                 THEM: " + this.snake2.score;
+  var score_text = "YOU: " + this.snakes[0].score
   this.ctx.font = "18px sans-serif"
   this.ctx.fillStyle = "#BBBBBB"
   this.ctx.fillText(score_text, 15, this.h-15);
-}
-
-SnakeGame.prototype.paintOpponent = function() {
-  for (var i = 0; i < this.snake2.snake_arr.length; i++) {
-    var c = this.snake2.snake_arr[i];
-    this.paint_cell(c.x, c.y, true);
+  var textWidth = this.ctx.measureText(score_text).width
+  if (this.snakes.length > 1) {
+    var opponent_score =  "THEM: " + this.snakes[1].score;
+    this.ctx.fillText(opponent_score, textWidth + 60, this.h-15);
   }
 }
 
-SnakeGame.prototype.paint_cell = function(x, y, op) {
-  this.ctx.fillStyle = '#7ed321';
-  if (op !== undefined) this.ctx.fillStyle = '#ff004c';
+SnakeGame.prototype.paintSnakes = function(snakes) {
+  // iterate over all snakes apart from your own
+  for (var i = 0; i < snakes.length; i++) {
+    this.paintSnake(snakes[i])
+  }
+}
+
+SnakeGame.prototype.paintSnake = function (snake) {
+  var arr = snake.snake_arr
+  for (var i = 0; i < arr.length; i++) {
+    var c = arr[i];
+    this.paint_cell(c.x, c.y, snake.color());
+  }
+}
+
+SnakeGame.prototype.paint_cell = function(x, y, color) {
+  this.ctx.fillStyle = color;
   this.ctx.fillRect(x * this.cw, y * this.cw, this.cw, this.cw);
   this.ctx.strokeStyle = this.ctx.fillStyle;
   this.ctx.strokeRect(x * this.cw, y * this.cw, this.cw, this.cw);
 }
 
-SnakeGame.prototype.check_collision = function(x, y, array) {
+SnakeGame.prototype.checkCollision = function(x, y, array) {
   //This function will check if the provided x/y coordinates exist
   //in an array of cells or not
   var arr = array || []
@@ -225,6 +276,23 @@ SnakeGame.prototype.setupKeyListeners = function() {
     else if (key == "39" && self.d != "left") self.d = "right";
     else if (key == "40" && self.d != "up") self.d = "down";
   })
+}
+
+SnakeGame.prototype.collisionOccurred = function(nx, ny) {
+  if (nx == -1 ||
+      nx == this.w / this.cw ||
+      ny == -1 ||
+      ny == this.h / this.cw ||
+      this.checkSnakeCollisions(nx, ny))
+  {
+    return true
+  }
+}
+
+SnakeGame.prototype.checkSnakeCollisions = function(nx, ny) {
+  for (var i = 0; i < this.snakes; i++) {
+    if (this.checkCollision(nx, ny, this.snakes[i])) return true
+  }
 }
 module.exports = SnakeGame;
 
