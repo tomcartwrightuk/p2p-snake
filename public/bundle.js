@@ -14,7 +14,7 @@ var manager = io.Manager();
 var socket = manager.socket('/')
 var p2psocket = new Socketiop2p(peerOpts, socket)
 
-socket.on('connect', function (data) {
+socket.on('waiting', function (data) {
   snake1 = new Snake(initiator)
   snakeGame = new SnakeGame(socket, true, [snake1])
 })
@@ -37,11 +37,10 @@ p2psocket.on('disconnected-player', function () {
 })
 
 function resetGame () {
-  clearInterval(snakeGame.game_loop)
+  if (snakeGame) clearInterval(snakeGame.game_loop)
   snakeGame = undefined
   snake1 = undefined
   snake2 = undefined
-  initiator = undefined
 }
 
 CanvasRenderingContext2D.prototype.wrapText = function (text, x, y, maxWidth, lineHeight) {
@@ -73,6 +72,7 @@ var Snake = function(initiator) {
   this.initiator = initiator;
   this.score = 0;
   this.snake_arr = [];
+  this.color = '#7ed321'
 }
 
 Snake.prototype.createSnake = function () {
@@ -94,12 +94,12 @@ Snake.prototype.resetScore = function () {
   this.score = 0
 }
 
-Snake.prototype.color = function () {
-  if (this.initiator) {
-    return '#ff004c'
-  } else {
-    return '#7ed321'
-  }
+Snake.prototype.setMySnakeColor = function (mySnake) {
+  this.color = '#ff004c'
+}
+
+Snake.prototype.headCell = function () {
+  return {x: this.snake_arr[0].x, y: this.snake_arr[0].y};
 }
 
 module.exports = Snake
@@ -121,6 +121,8 @@ var SnakeGame = function(socket, initiator, snakes) {
   // Canvas stuff
   var self = this;
   this.snakes = snakes
+  this.mySnake = snakes[0]
+  this.mySnake.setMySnakeColor()
   this.canvas = $("#canvas")[0];
   this.ctx = canvas.getContext("2d");
   this.w = $(window).width() - 30
@@ -145,7 +147,7 @@ var SnakeGame = function(socket, initiator, snakes) {
   this.init = function() {
     // TODO move to snake module
     self.d = "right"; //default direction
-    self.snakes[0].createSnake();
+    self.mySnake.createSnake();
 
     // paint every 60ms
     if (self.initiator) {
@@ -157,19 +159,44 @@ var SnakeGame = function(socket, initiator, snakes) {
     }
   }
   this.showIntro = function(players, cb) {
-    if (players) {
-      var introText = 'You have been matched with another player\n\n'
-    } else {
-      var introText = ''
-    }
     this.ctx.font = "24px courier"
     this.ctx.fillStyle = "#BBBBBB"
-    this.ctx.wrapText("Welcome to p2p snake\n\n" + introText + "Use the arrow keys to move the snake\n\nPlay will start in", 25, 35, 340, 28);
+    // this.ctx.wrapText("Welcome to p2p snake\n\n" + introText + "Use the arrow keys to move the snake\n\nPlay will start in", 25, 35, 340, 28);
+    var lines = [
+      'Welcome to p2p snake',
+      'Use the arrow keys to move the snake',
+      'Play will begin in:'
+    ]
+    if (players) lines.splice(1, 0, 'You have been matched with another player')
+
+    var lineHeight = 35
+    var lineH
+    for (i = 0; i < lines.length; i++) {
+      lineH = lineHeight + (lineHeight * (2 * i))
+      this.ctx.fillText(lines[i], 25, lineH)
+    }
+    changeCount(5)
+    function changeCount (count) {
+      if (count === 0) {
+        return
+      } else {
+        self.ctx.fillStyle = "black"
+        self.ctx.strokeStyle = "black"
+        self.ctx.fillText(count + 1, 25, lineH + 70)
+        self.ctx.fillStyle = "#BBBBBB"
+        self.ctx.strokeStyle = "#BBBBBB"
+        self.ctx.fillText(count, 25, lineH + 70)
+        setTimeout(function() {
+          changeCount(count - 1)
+        }, 1000)
+      }
+    }
+
     setTimeout(function() {
       cb()
-    }, 2000)
+    }, 5000)
   }
-  this.showIntro(snakes.length > 0, this.init);
+  this.showIntro(this.snakes.length > 1, this.init);
   this.setupKeyListeners();
 }
 
@@ -186,8 +213,8 @@ SnakeGame.prototype.paint = function() {
   this.ctx.fillRect(0, 0, this.w, this.h);
 
   // get reference to head cell
-  var nx = this.snakes[0].snake_arr[0].x;
-  var ny = this.snakes[0].snake_arr[0].y;
+  var nx = this.mySnake.headCell().x;
+  var ny = this.mySnake.headCell().y;
 
   // These were the position of the head cell.
   // increment it to get the new head position
@@ -197,7 +224,6 @@ SnakeGame.prototype.paint = function() {
   else if(this.d == "down") ny++;
 
   // This will restart the game if the snake hits the wall or it's body
-  // TODO refactor into function that checks all collisions
   if (this.collisionOccurred(nx, ny)) {
     this.init();
     return;
@@ -208,23 +234,23 @@ SnakeGame.prototype.paint = function() {
   // Create a new head instead of moving the tail
   if (nx == this.food.x && ny == this.food.y) {
     var tail = {x: nx, y: ny}; // this is a new head
-    this.snakes[0].score++;
+    this.mySnake.score++;
     // Create new food
     this.createFood();
   } else {
-    var tail = this.snakes[0].snake_arr.pop(); //pops out the last cell
+    var tail = this.mySnake.snake_arr.pop(); //pops out the last cell
     tail.x = nx; tail.y = ny;
   }
 
-  this.snakes[0].snake_arr.unshift(tail); //puts back the tail as the first cell
+  this.mySnake.snake_arr.unshift(tail); //puts back the tail as the first cell
 
-  this.socket.emit('message', {type: 'snake_arr', data: this.snakes[0].snake_arr, score: this.snakes[0].score, food: this.food})
+  this.socket.emit('message', {type: 'snake_arr', data: this.mySnake.snake_arr, score: this.mySnake.score, food: this.food})
   this.paintSnakes(this.snakes);
 
   // Paint food
   this.paint_cell(this.food.x, this.food.y);
   // Paint score
-  var score_text = "YOU: " + this.snakes[0].score
+  var score_text = "YOU: " + this.mySnake.score
   this.ctx.font = "18px sans-serif"
   this.ctx.fillStyle = "#BBBBBB"
   this.ctx.fillText(score_text, 15, this.h-15);
@@ -246,7 +272,7 @@ SnakeGame.prototype.paintSnake = function (snake) {
   var arr = snake.snake_arr
   for (var i = 0; i < arr.length; i++) {
     var c = arr[i];
-    this.paint_cell(c.x, c.y, snake.color());
+    this.paint_cell(c.x, c.y, snake.color);
   }
 }
 

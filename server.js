@@ -19,8 +19,12 @@ server.listen(port, function() {
 io.on('connection', function(socket) {
   clients[socket.id] = socket
   var room = findOrCreateRoom()
+  console.log(room);
   socket.join(room.name)
   room.players++
+  if (room.players === 1) {
+    socket.emit('waiting')
+  }
   console.log("joined %s", room.name);
   console.log(rooms);
   socket.on('error', function (err) {
@@ -56,7 +60,7 @@ function findOrCreateRoom () {
   var lastRoom = findEmptyRoom()
   if (!lastRoom || lastRoom.full) {
     var room = {players: 0, name: hat()}
-    return rooms.push(room)
+    return addRoom(room)
   }
   return lastRoom
 }
@@ -68,4 +72,9 @@ function findEmptyRoom() {
 function removePlayerOrRoom (room) {
   room.players--
   if (room.players === 0) rooms.splice(room)
+}
+
+function addRoom(room) {
+  rooms.push(room)
+  return rooms[rooms.length - 1]
 }
