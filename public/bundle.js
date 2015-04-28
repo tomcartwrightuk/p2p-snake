@@ -85,7 +85,7 @@ LatencyCalc.prototype.addPong = function(data) {
     var totalTime = _.reduce(this.pongs, function (total, pong, key) {
                       return total + (pong - self.pings[key])
                     }, 0);
-    var avTime = totalTime / numPongs
+    var avTime = ((totalTime / numPongs) / 2).toFixed(2)
     this.pings = {}
     this.pongs = {}
     this.emit('ping-update', avTime)
@@ -170,11 +170,8 @@ var SnakeGame = function(socket, initiator, snakes) {
   this.mySnake.setMySnakeColor()
   this.canvas = $("#canvas")[0];
   this.ctx = canvas.getContext("2d");
-  this.w = $(window).width() - 30
-  this.h = Math.round(this.w / 2)
-  canvas.width = this.w
-  canvas.height = this.h
   this.initiator = initiator;
+  this.setupCanvas();
   this.socket = socket;
   this.socket.on('message', function(msg) {
     if (msg.type === 'snake_arr') {
@@ -184,7 +181,6 @@ var SnakeGame = function(socket, initiator, snakes) {
       if (!self.initiator) self.paint();
     }
   })
-  this.cw = this.w / 40;
   this.loopTime = 100;
   this.d;
   this.food;
@@ -225,6 +221,7 @@ var SnakeGame = function(socket, initiator, snakes) {
   this.showIntro(this.snakes.length > 1, this.init);
   this.setupLatencyCalc();
   this.setupKeyListeners();
+  window.onresize = this.setupCanvas.bind(this)
 }
 
 SnakeGame.prototype.createFood = function() {
@@ -397,6 +394,14 @@ SnakeGame.prototype.setupLatencyCalc = function () {
   latencyCalc.on('ping-update', function(data) {
     self.currentLatency = data
   })
+}
+
+SnakeGame.prototype.setupCanvas = function () {
+  this.w = $(window).width() - 30
+  this.h = Math.round(this.w / 2)
+  this.canvas.width = this.w
+  this.canvas.height = this.h
+  this.cw = this.w / 40;
 }
 
 module.exports = SnakeGame;
@@ -22026,7 +22031,7 @@ function isUndefined(arg) {
 },{}],"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/inherits/inherits_browser.js":[function(require,module,exports){
 arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/inherits/inherits_browser.js"][0].apply(exports,arguments)
 },{}],"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/isarray/index.js":[function(require,module,exports){
-arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/node_modules/isarray/index.js"][0].apply(exports,arguments)
+arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/node_modules/isarray/index.js"][0].apply(exports,arguments)
 },{}],"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/process/browser.js":[function(require,module,exports){
 // shim for using process in browser
 
