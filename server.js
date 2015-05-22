@@ -19,14 +19,10 @@ server.listen(port, function() {
 io.on('connection', function(socket) {
   clients[socket.id] = socket
   var room = findOrCreateRoom()
-  console.log(room);
   socket.join(room.name)
-  room.players++
-  if (room.players === 1) {
-    socket.emit('waiting')
-  }
-  console.log("joined %s", room.name);
-  console.log(rooms);
+  room.playerCount++
+  room.players.push(socket)
+
   socket.on('error', function (err) {
     console.log("Error %s", err);
   })
@@ -35,46 +31,72 @@ io.on('connection', function(socket) {
 
   socket.on('disconnect', function () {
     delete clients[socket.id]
-    removePlayerOrRoom(room)
+    room.players.splice(room.players.indexOf(socket), 1)
+    removeRoom(room)
     io.to(room.name).emit('disconnected-player')
+
     // Move opponents to new rooms
-    var opponents = io.nsps['/'].adapter.rooms[room.name]
-    if (opponents) { // in case both players leave at the same time
-      Object.keys(opponents).forEach(function (clientId, i) {
-        room = findEmptyRoom()
-        if (clients[clientId] && room) {
-          socket.emit('initiator', 'true')
-          clients[clientId].join(room.name)
-        }
-      })
-    }
+    // var opponents = findOpponents(room.name, socket)
+    Object.keys(room.players).forEach(function (clientId, i) {
+      room = findReadyRoom()
+      if (clients[clientId] && room) {
+        clients[clientId].join(room.name)
+      }
+    })
   })
 
-  var numClients = Object.keys(io.nsps['/'].adapter.rooms[room.name]).length
-  if (numClients == 2) {
-    socket.emit('initiator', 'true')
+  socket.on('message', function (data) {
+    var players = room.players.filter(function (player) {
+      return player !== socket
+    })
+    players.forEach(function (player) {
+      player.emit('message', data)
+    })
+  })
+
+  if (room.playerCount === 1) {
+    socket.emit('waiting')
+  } else {
+    socket.emit('begin-game', true)
+    var players = room.players.filter(function (player) {
+      return player !== socket
+    })
+    players.forEach(function (player) {
+      player.emit('begin-game', false)
+    })
   }
 })
 
 function findOrCreateRoom () {
-  var lastRoom = findEmptyRoom()
+  var lastRoom = findReadyRoom ()
   if (!lastRoom || lastRoom.full) {
-    var room = {players: 0, name: hat()}
+    var room = {players: [], playerCount: 0, name: hat()}
     return addRoom(room)
   }
   return lastRoom
 }
 
-function findEmptyRoom() {
-  return rooms.filter(function(room) { return room.players === 1 })[0];
+function findReadyRoom () {
+  return rooms.filter(function(room) { return room.playerCount === 1 })[0];
 }
 
-function removePlayerOrRoom (room) {
-  room.players--
-  if (room.players === 0) rooms.splice(room)
+function removeRoom (room) {
+  room.playerCount--
+  if (room.playerCount === 0) rooms.splice(rooms.indexOf(room), 1)
 }
 
-function addRoom(room) {
-  rooms.push(room)
-  return rooms[rooms.length - 1]
+function addRoom (room) {
+  return rooms[rooms.push(room) - 1]
+}
+
+function findOpponents (room_name, socket) {
+  var players = socket.adapter.rooms[room_name]
+  console.log('PLayser: %s', JSON.stringify(players))
+  var o;
+  if (players) {
+    var o = Object.keys(players).filter(function(player) {
+      return player !== socket.id
+    })
+  }
+  return o
 }

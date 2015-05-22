@@ -19,17 +19,18 @@ socket.on('waiting', function (data) {
   singlePlayerGame()
 })
 
-p2psocket.on('initiator', function (msg) {
-  initiator = true
-})
-
-p2psocket.on('ready', function () {
+p2psocket.on('begin-game', function(data) {
   resetGame()
-  p2psocket.useSockets = false
   loadGame()
+  initiator = data
+  socket.off('message')
   snake1 = new Snake(initiator)
   snake2 = new Snake()
   snakeGame = new SnakeGame(p2psocket, initiator, [snake1, snake2])
+})
+
+p2psocket.on('ready', function () {
+  p2psocket.useSockets = false
 })
 
 p2psocket.on('disconnected-player', function () {
@@ -166,14 +167,16 @@ var SnakeGame = function(socket, initiator, snakes) {
   // Canvas stuff
   var self = this;
   this.snakes = snakes
+  console.log(this.snakes);
   this.mySnake = snakes[0]
   this.mySnake.setMySnakeColor()
   this.canvas = $("#canvas")[0];
   this.ctx = canvas.getContext("2d");
-  this.initiator = initiator;
+  this.initiator = initiator || false;
   this.setupCanvas();
   this.socket = socket;
   this.socket.on('message', function(msg) {
+    console.log('Message %s', msg);
     if (msg.type === 'snake_arr') {
       self.snakes[1].snake_arr = msg.data
       self.snakes[1].score = msg.score
@@ -193,7 +196,9 @@ var SnakeGame = function(socket, initiator, snakes) {
 
     // paint every loopTime ms
     if (self.initiator) {
+      console.log("init claled");
       self.createFood(); //Now we can see the food particle
+      console.log('Gmae loop %', self.game_loop);
       if (typeof self.game_loop != "undefined") clearInterval(self.game_loop);
       self.game_loop = setInterval(
         self.paint.bind(self)
@@ -201,9 +206,10 @@ var SnakeGame = function(socket, initiator, snakes) {
     }
   }
   this.showIntro = function(players, cb) {
+    console.log('PLayers %s', players);
     this.resetCanvas()
     this.ctx.fillStyle = "#DDDDDD"
-    this.ctx.font = "bold 22px sans-serif"
+    this.ctx.font = "bold 18px sans-serif"
     if (players) {
       var text = 'OPPONENT JOINED. STARTING IN:'
       var textOffset = (this.w / 2) - (this.ctx.measureText(text).width / 2)
@@ -279,7 +285,7 @@ SnakeGame.prototype.paint = function() {
   if (this.snakes.length > 1) {
     var opponent_score =  "THEM: " + this.snakes[1].score;
     this.ctx.fillText(opponent_score, textWidth + 60, this.h-15);
-    var statusBarText = 'UA: ' + browser + '     PING ' + this.currentLatency + ' ms' + '     P2P: ' + !this.socket.useSockets;
+    var statusBarText = 'initiator: ' + this.initiator + '     UA: ' + browser + '     PING ' + this.currentLatency + ' ms' + '     P2P: ' + !this.socket.useSockets;
     this.ctx.fillText(statusBarText, this.w - 350, this.h-15);
   }
 }
@@ -17677,7 +17683,6 @@ function Socketiop2p (opts, socket) {
                  }
 
   socket.on('numClients', function (numClients) {
-    console.log("numclients");
     self.peerId = socket.io.engine.id
     self.numConnectedClients = numClients
     generateOffers(function (offers) {
@@ -18177,7 +18182,7 @@ arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/index.js":[function(require,module,exports){
 arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/has-binary/index.js"][0].apply(exports,arguments)
 },{"isarray":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/node_modules/isarray/index.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/node_modules/isarray/index.js":[function(require,module,exports){
-arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/socket.io-parser/node_modules/isarray/index.js"][0].apply(exports,arguments)
+arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/has-binary/node_modules/isarray/index.js"][0].apply(exports,arguments)
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/hat/index.js":[function(require,module,exports){
 arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/hat/index.js"][0].apply(exports,arguments)
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/binary.js":[function(require,module,exports){
@@ -18605,7 +18610,7 @@ arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/node_modules/debug/debug.js":[function(require,module,exports){
 arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/debug/debug.js"][0].apply(exports,arguments)
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/node_modules/isarray/index.js":[function(require,module,exports){
-arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/node_modules/isarray/index.js"][0].apply(exports,arguments)
+arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/has-binary/node_modules/isarray/index.js"][0].apply(exports,arguments)
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/node_modules/json3/lib/json3.js":[function(require,module,exports){
 arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/socket.io-parser/node_modules/json3/lib/json3.js"][0].apply(exports,arguments)
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/to-array/index.js":[function(require,module,exports){
@@ -22031,7 +22036,7 @@ function isUndefined(arg) {
 },{}],"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/inherits/inherits_browser.js":[function(require,module,exports){
 arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/inherits/inherits_browser.js"][0].apply(exports,arguments)
 },{}],"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/isarray/index.js":[function(require,module,exports){
-arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/node_modules/isarray/index.js"][0].apply(exports,arguments)
+arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/has-binary/node_modules/isarray/index.js"][0].apply(exports,arguments)
 },{}],"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/process/browser.js":[function(require,module,exports){
 // shim for using process in browser
 
