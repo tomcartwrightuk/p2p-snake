@@ -575,6 +575,507 @@ Emitter.prototype.hasListeners = function(event){
   return !! this.listeners(event).length;
 };
 
+},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/debug/browser.js":[function(require,module,exports){
+
+/**
+ * This is the web browser implementation of `debug()`.
+ *
+ * Expose `debug()` as the module.
+ */
+
+exports = module.exports = require('./debug');
+exports.log = log;
+exports.formatArgs = formatArgs;
+exports.save = save;
+exports.load = load;
+exports.useColors = useColors;
+
+/**
+ * Use chrome.storage.local if we are in an app
+ */
+
+var storage;
+
+if (typeof chrome !== 'undefined' && typeof chrome.storage !== 'undefined')
+  storage = chrome.storage.local;
+else
+  storage = localstorage();
+
+/**
+ * Colors.
+ */
+
+exports.colors = [
+  'lightseagreen',
+  'forestgreen',
+  'goldenrod',
+  'dodgerblue',
+  'darkorchid',
+  'crimson'
+];
+
+/**
+ * Currently only WebKit-based Web Inspectors, Firefox >= v31,
+ * and the Firebug extension (any Firefox version) are known
+ * to support "%c" CSS customizations.
+ *
+ * TODO: add a `localStorage` variable to explicitly enable/disable colors
+ */
+
+function useColors() {
+  // is webkit? http://stackoverflow.com/a/16459606/376773
+  return ('WebkitAppearance' in document.documentElement.style) ||
+    // is firebug? http://stackoverflow.com/a/398120/376773
+    (window.console && (console.firebug || (console.exception && console.table))) ||
+    // is firefox >= v31?
+    // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
+    (navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31);
+}
+
+/**
+ * Map %j to `JSON.stringify()`, since no Web Inspectors do that by default.
+ */
+
+exports.formatters.j = function(v) {
+  return JSON.stringify(v);
+};
+
+
+/**
+ * Colorize log arguments if enabled.
+ *
+ * @api public
+ */
+
+function formatArgs() {
+  var args = arguments;
+  var useColors = this.useColors;
+
+  args[0] = (useColors ? '%c' : '')
+    + this.namespace
+    + (useColors ? ' %c' : ' ')
+    + args[0]
+    + (useColors ? '%c ' : ' ')
+    + '+' + exports.humanize(this.diff);
+
+  if (!useColors) return args;
+
+  var c = 'color: ' + this.color;
+  args = [args[0], c, 'color: inherit'].concat(Array.prototype.slice.call(args, 1));
+
+  // the final "%c" is somewhat tricky, because there could be other
+  // arguments passed either before or after the %c, so we need to
+  // figure out the correct index to insert the CSS into
+  var index = 0;
+  var lastC = 0;
+  args[0].replace(/%[a-z%]/g, function(match) {
+    if ('%%' === match) return;
+    index++;
+    if ('%c' === match) {
+      // we only are interested in the *last* %c
+      // (the user may have provided their own)
+      lastC = index;
+    }
+  });
+
+  args.splice(lastC, 0, c);
+  return args;
+}
+
+/**
+ * Invokes `console.log()` when available.
+ * No-op when `console.log` is not a "function".
+ *
+ * @api public
+ */
+
+function log() {
+  // this hackery is required for IE8/9, where
+  // the `console.log` function doesn't have 'apply'
+  return 'object' === typeof console
+    && console.log
+    && Function.prototype.apply.call(console.log, console, arguments);
+}
+
+/**
+ * Save `namespaces`.
+ *
+ * @param {String} namespaces
+ * @api private
+ */
+
+function save(namespaces) {
+  try {
+    if (null == namespaces) {
+      storage.removeItem('debug');
+    } else {
+      storage.debug = namespaces;
+    }
+  } catch(e) {}
+}
+
+/**
+ * Load `namespaces`.
+ *
+ * @return {String} returns the previously persisted debug modes
+ * @api private
+ */
+
+function load() {
+  var r;
+  try {
+    r = storage.debug;
+  } catch(e) {}
+  return r;
+}
+
+/**
+ * Enable namespaces listed in `localStorage.debug` initially.
+ */
+
+exports.enable(load());
+
+/**
+ * Localstorage attempts to return the localstorage.
+ *
+ * This is necessary because safari throws
+ * when a user disables cookies/localstorage
+ * and you attempt to access it.
+ *
+ * @return {LocalStorage}
+ * @api private
+ */
+
+function localstorage(){
+  try {
+    return window.localStorage;
+  } catch (e) {}
+}
+
+},{"./debug":"/Users/tom/code/socket-io/p2p-snake/node_modules/debug/debug.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/debug/debug.js":[function(require,module,exports){
+
+/**
+ * This is the common logic for both the Node.js and web browser
+ * implementations of `debug()`.
+ *
+ * Expose `debug()` as the module.
+ */
+
+exports = module.exports = debug;
+exports.coerce = coerce;
+exports.disable = disable;
+exports.enable = enable;
+exports.enabled = enabled;
+exports.humanize = require('ms');
+
+/**
+ * The currently active debug mode names, and names to skip.
+ */
+
+exports.names = [];
+exports.skips = [];
+
+/**
+ * Map of special "%n" handling functions, for the debug "format" argument.
+ *
+ * Valid key names are a single, lowercased letter, i.e. "n".
+ */
+
+exports.formatters = {};
+
+/**
+ * Previously assigned color.
+ */
+
+var prevColor = 0;
+
+/**
+ * Previous log timestamp.
+ */
+
+var prevTime;
+
+/**
+ * Select a color.
+ *
+ * @return {Number}
+ * @api private
+ */
+
+function selectColor() {
+  return exports.colors[prevColor++ % exports.colors.length];
+}
+
+/**
+ * Create a debugger with the given `namespace`.
+ *
+ * @param {String} namespace
+ * @return {Function}
+ * @api public
+ */
+
+function debug(namespace) {
+
+  // define the `disabled` version
+  function disabled() {
+  }
+  disabled.enabled = false;
+
+  // define the `enabled` version
+  function enabled() {
+
+    var self = enabled;
+
+    // set `diff` timestamp
+    var curr = +new Date();
+    var ms = curr - (prevTime || curr);
+    self.diff = ms;
+    self.prev = prevTime;
+    self.curr = curr;
+    prevTime = curr;
+
+    // add the `color` if not set
+    if (null == self.useColors) self.useColors = exports.useColors();
+    if (null == self.color && self.useColors) self.color = selectColor();
+
+    var args = Array.prototype.slice.call(arguments);
+
+    args[0] = exports.coerce(args[0]);
+
+    if ('string' !== typeof args[0]) {
+      // anything else let's inspect with %o
+      args = ['%o'].concat(args);
+    }
+
+    // apply any `formatters` transformations
+    var index = 0;
+    args[0] = args[0].replace(/%([a-z%])/g, function(match, format) {
+      // if we encounter an escaped % then don't increase the array index
+      if (match === '%%') return match;
+      index++;
+      var formatter = exports.formatters[format];
+      if ('function' === typeof formatter) {
+        var val = args[index];
+        match = formatter.call(self, val);
+
+        // now we need to remove `args[index]` since it's inlined in the `format`
+        args.splice(index, 1);
+        index--;
+      }
+      return match;
+    });
+
+    if ('function' === typeof exports.formatArgs) {
+      args = exports.formatArgs.apply(self, args);
+    }
+    var logFn = enabled.log || exports.log || console.log.bind(console);
+    logFn.apply(self, args);
+  }
+  enabled.enabled = true;
+
+  var fn = exports.enabled(namespace) ? enabled : disabled;
+
+  fn.namespace = namespace;
+
+  return fn;
+}
+
+/**
+ * Enables a debug mode by namespaces. This can include modes
+ * separated by a colon and wildcards.
+ *
+ * @param {String} namespaces
+ * @api public
+ */
+
+function enable(namespaces) {
+  exports.save(namespaces);
+
+  var split = (namespaces || '').split(/[\s,]+/);
+  var len = split.length;
+
+  for (var i = 0; i < len; i++) {
+    if (!split[i]) continue; // ignore empty strings
+    namespaces = split[i].replace(/\*/g, '.*?');
+    if (namespaces[0] === '-') {
+      exports.skips.push(new RegExp('^' + namespaces.substr(1) + '$'));
+    } else {
+      exports.names.push(new RegExp('^' + namespaces + '$'));
+    }
+  }
+}
+
+/**
+ * Disable debug output.
+ *
+ * @api public
+ */
+
+function disable() {
+  exports.enable('');
+}
+
+/**
+ * Returns true if the given mode name is enabled, false otherwise.
+ *
+ * @param {String} name
+ * @return {Boolean}
+ * @api public
+ */
+
+function enabled(name) {
+  var i, len;
+  for (i = 0, len = exports.skips.length; i < len; i++) {
+    if (exports.skips[i].test(name)) {
+      return false;
+    }
+  }
+  for (i = 0, len = exports.names.length; i < len; i++) {
+    if (exports.names[i].test(name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Coerce `val`.
+ *
+ * @param {Mixed} val
+ * @return {Mixed}
+ * @api private
+ */
+
+function coerce(val) {
+  if (val instanceof Error) return val.stack || val.message;
+  return val;
+}
+
+},{"ms":"/Users/tom/code/socket-io/p2p-snake/node_modules/debug/node_modules/ms/index.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/debug/node_modules/ms/index.js":[function(require,module,exports){
+/**
+ * Helpers.
+ */
+
+var s = 1000;
+var m = s * 60;
+var h = m * 60;
+var d = h * 24;
+var y = d * 365.25;
+
+/**
+ * Parse or format the given `val`.
+ *
+ * Options:
+ *
+ *  - `long` verbose formatting [false]
+ *
+ * @param {String|Number} val
+ * @param {Object} options
+ * @return {String|Number}
+ * @api public
+ */
+
+module.exports = function(val, options){
+  options = options || {};
+  if ('string' == typeof val) return parse(val);
+  return options.long
+    ? long(val)
+    : short(val);
+};
+
+/**
+ * Parse the given `str` and return milliseconds.
+ *
+ * @param {String} str
+ * @return {Number}
+ * @api private
+ */
+
+function parse(str) {
+  var match = /^((?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|years?|yrs?|y)?$/i.exec(str);
+  if (!match) return;
+  var n = parseFloat(match[1]);
+  var type = (match[2] || 'ms').toLowerCase();
+  switch (type) {
+    case 'years':
+    case 'year':
+    case 'yrs':
+    case 'yr':
+    case 'y':
+      return n * y;
+    case 'days':
+    case 'day':
+    case 'd':
+      return n * d;
+    case 'hours':
+    case 'hour':
+    case 'hrs':
+    case 'hr':
+    case 'h':
+      return n * h;
+    case 'minutes':
+    case 'minute':
+    case 'mins':
+    case 'min':
+    case 'm':
+      return n * m;
+    case 'seconds':
+    case 'second':
+    case 'secs':
+    case 'sec':
+    case 's':
+      return n * s;
+    case 'milliseconds':
+    case 'millisecond':
+    case 'msecs':
+    case 'msec':
+    case 'ms':
+      return n;
+  }
+}
+
+/**
+ * Short format for `ms`.
+ *
+ * @param {Number} ms
+ * @return {String}
+ * @api private
+ */
+
+function short(ms) {
+  if (ms >= d) return Math.round(ms / d) + 'd';
+  if (ms >= h) return Math.round(ms / h) + 'h';
+  if (ms >= m) return Math.round(ms / m) + 'm';
+  if (ms >= s) return Math.round(ms / s) + 's';
+  return ms + 'ms';
+}
+
+/**
+ * Long format for `ms`.
+ *
+ * @param {Number} ms
+ * @return {String}
+ * @api private
+ */
+
+function long(ms) {
+  return plural(ms, d, 'day')
+    || plural(ms, h, 'hour')
+    || plural(ms, m, 'minute')
+    || plural(ms, s, 'second')
+    || ms + ' ms';
+}
+
+/**
+ * Pluralization helper.
+ */
+
+function plural(ms, n, name) {
+  if (ms < n) return;
+  if (ms < n * 1.5) return Math.floor(ms / n) + ' ' + name;
+  return Math.ceil(ms / n) + ' ' + name + 's';
+}
+
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/hat/index.js":[function(require,module,exports){
 var hat = module.exports = function (bits, base) {
     if (!base) base = 16;
@@ -9846,1008 +10347,7 @@ return jQuery;
 
 }));
 
-},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/index.js":[function(require,module,exports){
-module.exports = Peer
-
-var debug = require('debug')('simple-peer')
-var EventEmitter = require('events').EventEmitter
-var extend = require('extend.js')
-var hat = require('hat')
-var inherits = require('inherits')
-var isTypedArray = require('is-typedarray')
-var once = require('once')
-var stream = require('stream')
-var toBuffer = require('typedarray-to-buffer')
-
-var RTCPeerConnection = typeof window !== 'undefined' &&
-    (window.mozRTCPeerConnection
-  || window.RTCPeerConnection
-  || window.webkitRTCPeerConnection)
-
-var RTCSessionDescription = typeof window !== 'undefined' &&
-    (window.mozRTCSessionDescription
-  || window.RTCSessionDescription
-  || window.webkitRTCSessionDescription)
-
-var RTCIceCandidate = typeof window !== 'undefined' &&
-    (window.mozRTCIceCandidate
-  || window.RTCIceCandidate
-  || window.webkitRTCIceCandidate)
-
-inherits(Peer, EventEmitter)
-
-/**
- * A WebRTC peer connection.
- * @param {Object} opts
- */
-function Peer (opts) {
-  var self = this
-  if (!(self instanceof Peer)) return new Peer(opts)
-  EventEmitter.call(self)
-
-  opts = extend({
-    initiator: false,
-    stream: false,
-    config: Peer.config,
-    constraints: Peer.constraints,
-    channelName: (opts && opts.initiator) ? hat(160) : null,
-    trickle: true
-  }, opts)
-
-  extend(self, opts)
-
-  debug('new peer initiator: %s channelName: %s', self.initiator, self.channelName)
-
-  self.destroyed = false
-  self.ready = false
-  self._pcReady = false
-  self._channelReady = false
-  self._dataStreams = []
-  self._iceComplete = false // done with ice candidate trickle (got null candidate)
-
-  self._pc = new RTCPeerConnection(self.config, self.constraints)
-  self._pc.oniceconnectionstatechange = self._onIceConnectionStateChange.bind(self)
-  self._pc.onsignalingstatechange = self._onSignalingStateChange.bind(self)
-  self._pc.onicecandidate = self._onIceCandidate.bind(self)
-
-  self._channel = null
-
-  if (self.stream)
-    self._setupVideo(self.stream)
-  self._pc.onaddstream = self._onAddStream.bind(self)
-
-  if (self.initiator) {
-    self._setupData({ channel: self._pc.createDataChannel(self.channelName) })
-
-    self._pc.onnegotiationneeded = once(function () {
-      self._pc.createOffer(function (offer) {
-        speedHack(offer)
-        self._pc.setLocalDescription(offer)
-        var sendOffer = function () {
-          self.emit('signal', self._pc.localDescription || offer)
-        }
-        if (self.trickle || self._iceComplete) sendOffer()
-        else self.once('_iceComplete', sendOffer) // wait for candidates
-      }, self._onError.bind(self))
-    })
-
-    if (window.mozRTCPeerConnection) {
-      // Firefox does not trigger this event automatically
-      setTimeout(function () {
-        self._pc.onnegotiationneeded()
-      }, 0)
-    }
-  } else {
-    self._pc.ondatachannel = self._setupData.bind(self)
-  }
-}
-
-/**
- * Expose config and constraints for overriding all Peer instances. Otherwise, just
- * set opts.config and opts.constraints when constructing a Peer.
- */
-Peer.config = { iceServers: [ { url: 'stun:23.21.150.121' } ] }
-Peer.constraints = {}
-
-Peer.prototype.send = function (data, cb) {
-  var self = this
-  if (!self._channelReady) return self.once('ready', self.send.bind(self, data, cb))
-  debug('send %s', data)
-
-  if (isTypedArray.strict(data) || data instanceof ArrayBuffer ||
-      data instanceof Blob || typeof data === 'string') {
-    self._channel.send(data)
-  } else {
-    self._channel.send(JSON.stringify(data))
-  }
-  if (cb) cb(null)
-}
-
-Peer.prototype.signal = function (data) {
-  var self = this
-  if (self.destroyed) return
-  if (typeof data === 'string') {
-    try {
-      data = JSON.parse(data)
-    } catch (err) {
-      data = {}
-    }
-  }
-  debug('signal %s', JSON.stringify(data))
-  if (data.sdp) {
-    self._pc.setRemoteDescription(new RTCSessionDescription(data), function () {
-      var needsAnswer = self._pc.remoteDescription.type === 'offer'
-      if (needsAnswer) {
-        self._pc.createAnswer(function (answer) {
-          speedHack(answer)
-          self._pc.setLocalDescription(answer)
-          var sendAnswer = function () {
-            self.emit('signal', self._pc.localDescription || answer)
-          }
-          if (self.trickle || self._iceComplete) sendAnswer()
-          else self.once('_iceComplete', sendAnswer)
-        }, self._onError.bind(self))
-      }
-    }, self._onError.bind(self))
-  }
-  if (data.candidate) {
-    try {
-      self._pc.addIceCandidate(new RTCIceCandidate(data.candidate))
-    } catch (err) {
-      self.destroy(new Error('error adding candidate, ' + err.message))
-    }
-  }
-  if (!data.sdp && !data.candidate)
-    self.destroy(new Error('signal() called with invalid signal data'))
-}
-
-Peer.prototype.destroy = function (err, onclose) {
-  var self = this
-  if (self.destroyed) return
-  debug('destroy (error: %s)', err && err.message)
-  self.destroyed = true
-  self.ready = false
-
-  if (typeof err === 'function') {
-    onclose = err
-    err = null
-  }
-
-  if (onclose) self.once('close', onclose)
-
-  if (self._pc) {
-    try {
-      self._pc.close()
-    } catch (err) {}
-
-    self._pc.oniceconnectionstatechange = null
-    self._pc.onsignalingstatechange = null
-    self._pc.onicecandidate = null
-  }
-
-  if (self._channel) {
-    try {
-      self._channel.close()
-    } catch (err) {}
-
-    self._channel.onmessage = null
-    self._channel.onopen = null
-    self._channel.onclose = null
-  }
-  self._pc = null
-  self._channel = null
-
-  self._dataStreams.forEach(function (stream) {
-    if (err) stream.emit('error', err)
-    if (!stream._readableState.ended) stream.push(null)
-    if (!stream._writableState.finished) stream.end()
-  })
-  self._dataStreams = []
-
-  if (err) self.emit('error', err)
-  self.emit('close')
-}
-
-Peer.prototype.getDataStream = function (opts) {
-  var self = this
-  if (self.destroyed) throw new Error('peer is destroyed')
-  var dataStream = new DataStream(extend({ _peer: self }, opts))
-  self._dataStreams.push(dataStream)
-  return dataStream
-}
-
-Peer.prototype._setupData = function (event) {
-  var self = this
-  self._channel = event.channel
-  self.channelName = self._channel.label
-
-  self._channel.binaryType = 'arraybuffer'
-  self._channel.onmessage = self._onChannelMessage.bind(self)
-  self._channel.onopen = self._onChannelOpen.bind(self)
-  self._channel.onclose = self._onChannelClose.bind(self)
-}
-
-Peer.prototype._setupVideo = function (stream) {
-  var self = this
-  self._pc.addStream(stream)
-}
-
-Peer.prototype._onIceConnectionStateChange = function () {
-  var self = this
-  if (self.destroyed) return
-  var iceGatheringState = self._pc.iceGatheringState
-  var iceConnectionState = self._pc.iceConnectionState
-  self.emit('iceConnectionStateChange', iceGatheringState, iceConnectionState)
-  debug('iceConnectionStateChange %s %s', iceGatheringState, iceConnectionState)
-  if (iceConnectionState === 'connected' || iceConnectionState === 'completed') {
-    self._pcReady = true
-    self._maybeReady()
-  }
-  if (iceConnectionState === 'disconnected' || iceConnectionState === 'closed')
-    self.destroy()
-}
-
-Peer.prototype._maybeReady = function () {
-  var self = this
-  debug('maybeReady pc %s channel %s', self._pcReady, self._channelReady)
-  if (!self.ready && self._pcReady && self._channelReady) {
-    debug('ready')
-    self.ready = true
-    self.emit('ready')
-  }
-}
-
-Peer.prototype._onSignalingStateChange = function () {
-  var self = this
-  if (self.destroyed) return
-  self.emit('signalingStateChange', self._pc.signalingState)
-  debug('signalingStateChange %s', self._pc.signalingState)
-}
-
-Peer.prototype._onIceCandidate = function (event) {
-  var self = this
-  if (self.destroyed) return
-  if (event.candidate && self.trickle) {
-    self.emit('signal', { candidate: event.candidate })
-  } else if (!event.candidate) {
-    self._iceComplete = true
-    self.emit('_iceComplete')
-  }
-}
-
-Peer.prototype._onChannelMessage = function (event) {
-  var self = this
-  if (self.destroyed) return
-  var data = event.data
-  debug('receive %s', data)
-
-  if (data instanceof ArrayBuffer) {
-    data = toBuffer(new Uint8Array(data))
-    self.emit('message', data)
-  } else {
-    try {
-      self.emit('message', JSON.parse(data))
-    } catch (err) {
-      self.emit('message', data)
-    }
-  }
-  self._dataStreams.forEach(function (stream) {
-    stream.push(data)
-  })
-}
-
-Peer.prototype._onChannelOpen = function () {
-  var self = this
-  if (self.destroyed) return
-  self._channelReady = true
-  self._maybeReady()
-}
-
-Peer.prototype._onChannelClose = function () {
-  var self = this
-  if (self.destroyed) return
-  self._channelReady = false
-  self.destroy()
-}
-
-Peer.prototype._onAddStream = function (event) {
-  var self = this
-  if (self.destroyed) return
-  self.emit('stream', event.stream)
-}
-
-Peer.prototype._onError = function (err) {
-  var self = this
-  if (self.destroyed) return
-  debug('error %s', err.message)
-  self.destroy(err)
-}
-
-// Duplex Stream for data channel
-
-inherits(DataStream, stream.Duplex)
-
-function DataStream (opts) {
-  var self = this
-  stream.Duplex.call(self, opts)
-  self._peer = opts._peer
-  debug('new stream')
-}
-
-DataStream.prototype.destroy = function () {
-  var self = this
-  self._peer.destroy()
-}
-
-DataStream.prototype._read = function () {}
-
-DataStream.prototype._write = function (chunk, encoding, cb) {
-  var self = this
-  self._peer.send(chunk, cb)
-}
-
-function speedHack (obj) {
-  var s = obj.sdp.split('b=AS:30')
-  if (s.length > 1)
-    obj.sdp = s[0] + 'b=AS:1638400' + s[1]
-}
-
-},{"debug":"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/debug/browser.js","events":"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/events/events.js","extend.js":"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/extend.js/index.js","hat":"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/hat/index.js","inherits":"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/inherits/inherits_browser.js","is-typedarray":"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/is-typedarray/index.js","once":"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/once/once.js","stream":"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/stream-browserify/index.js","typedarray-to-buffer":"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/typedarray-to-buffer/index.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/debug/browser.js":[function(require,module,exports){
-
-/**
- * This is the web browser implementation of `debug()`.
- *
- * Expose `debug()` as the module.
- */
-
-exports = module.exports = require('./debug');
-exports.log = log;
-exports.formatArgs = formatArgs;
-exports.save = save;
-exports.load = load;
-exports.useColors = useColors;
-
-/**
- * Use chrome.storage.local if we are in an app
- */
-
-var storage;
-
-if (typeof chrome !== 'undefined' && typeof chrome.storage !== 'undefined')
-  storage = chrome.storage.local;
-else
-  storage = window.localStorage;
-
-/**
- * Colors.
- */
-
-exports.colors = [
-  'lightseagreen',
-  'forestgreen',
-  'goldenrod',
-  'dodgerblue',
-  'darkorchid',
-  'crimson'
-];
-
-/**
- * Currently only WebKit-based Web Inspectors, Firefox >= v31,
- * and the Firebug extension (any Firefox version) are known
- * to support "%c" CSS customizations.
- *
- * TODO: add a `localStorage` variable to explicitly enable/disable colors
- */
-
-function useColors() {
-  // is webkit? http://stackoverflow.com/a/16459606/376773
-  return ('WebkitAppearance' in document.documentElement.style) ||
-    // is firebug? http://stackoverflow.com/a/398120/376773
-    (window.console && (console.firebug || (console.exception && console.table))) ||
-    // is firefox >= v31?
-    // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
-    (navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31);
-}
-
-/**
- * Map %j to `JSON.stringify()`, since no Web Inspectors do that by default.
- */
-
-exports.formatters.j = function(v) {
-  return JSON.stringify(v);
-};
-
-
-/**
- * Colorize log arguments if enabled.
- *
- * @api public
- */
-
-function formatArgs() {
-  var args = arguments;
-  var useColors = this.useColors;
-
-  args[0] = (useColors ? '%c' : '')
-    + this.namespace
-    + (useColors ? ' %c' : ' ')
-    + args[0]
-    + (useColors ? '%c ' : ' ')
-    + '+' + exports.humanize(this.diff);
-
-  if (!useColors) return args;
-
-  var c = 'color: ' + this.color;
-  args = [args[0], c, 'color: inherit'].concat(Array.prototype.slice.call(args, 1));
-
-  // the final "%c" is somewhat tricky, because there could be other
-  // arguments passed either before or after the %c, so we need to
-  // figure out the correct index to insert the CSS into
-  var index = 0;
-  var lastC = 0;
-  args[0].replace(/%[a-z%]/g, function(match) {
-    if ('%%' === match) return;
-    index++;
-    if ('%c' === match) {
-      // we only are interested in the *last* %c
-      // (the user may have provided their own)
-      lastC = index;
-    }
-  });
-
-  args.splice(lastC, 0, c);
-  return args;
-}
-
-/**
- * Invokes `console.log()` when available.
- * No-op when `console.log` is not a "function".
- *
- * @api public
- */
-
-function log() {
-  // this hackery is required for IE8/9, where
-  // the `console.log` function doesn't have 'apply'
-  return 'object' === typeof console
-    && console.log
-    && Function.prototype.apply.call(console.log, console, arguments);
-}
-
-/**
- * Save `namespaces`.
- *
- * @param {String} namespaces
- * @api private
- */
-
-function save(namespaces) {
-  try {
-    if (null == namespaces) {
-      storage.removeItem('debug');
-    } else {
-      storage.debug = namespaces;
-    }
-  } catch(e) {}
-}
-
-/**
- * Load `namespaces`.
- *
- * @return {String} returns the previously persisted debug modes
- * @api private
- */
-
-function load() {
-  var r;
-  try {
-    r = storage.debug;
-  } catch(e) {}
-  return r;
-}
-
-/**
- * Enable namespaces listed in `localStorage.debug` initially.
- */
-
-exports.enable(load());
-
-},{"./debug":"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/debug/debug.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/debug/debug.js":[function(require,module,exports){
-
-/**
- * This is the common logic for both the Node.js and web browser
- * implementations of `debug()`.
- *
- * Expose `debug()` as the module.
- */
-
-exports = module.exports = debug;
-exports.coerce = coerce;
-exports.disable = disable;
-exports.enable = enable;
-exports.enabled = enabled;
-exports.humanize = require('ms');
-
-/**
- * The currently active debug mode names, and names to skip.
- */
-
-exports.names = [];
-exports.skips = [];
-
-/**
- * Map of special "%n" handling functions, for the debug "format" argument.
- *
- * Valid key names are a single, lowercased letter, i.e. "n".
- */
-
-exports.formatters = {};
-
-/**
- * Previously assigned color.
- */
-
-var prevColor = 0;
-
-/**
- * Previous log timestamp.
- */
-
-var prevTime;
-
-/**
- * Select a color.
- *
- * @return {Number}
- * @api private
- */
-
-function selectColor() {
-  return exports.colors[prevColor++ % exports.colors.length];
-}
-
-/**
- * Create a debugger with the given `namespace`.
- *
- * @param {String} namespace
- * @return {Function}
- * @api public
- */
-
-function debug(namespace) {
-
-  // define the `disabled` version
-  function disabled() {
-  }
-  disabled.enabled = false;
-
-  // define the `enabled` version
-  function enabled() {
-
-    var self = enabled;
-
-    // set `diff` timestamp
-    var curr = +new Date();
-    var ms = curr - (prevTime || curr);
-    self.diff = ms;
-    self.prev = prevTime;
-    self.curr = curr;
-    prevTime = curr;
-
-    // add the `color` if not set
-    if (null == self.useColors) self.useColors = exports.useColors();
-    if (null == self.color && self.useColors) self.color = selectColor();
-
-    var args = Array.prototype.slice.call(arguments);
-
-    args[0] = exports.coerce(args[0]);
-
-    if ('string' !== typeof args[0]) {
-      // anything else let's inspect with %o
-      args = ['%o'].concat(args);
-    }
-
-    // apply any `formatters` transformations
-    var index = 0;
-    args[0] = args[0].replace(/%([a-z%])/g, function(match, format) {
-      // if we encounter an escaped % then don't increase the array index
-      if (match === '%%') return match;
-      index++;
-      var formatter = exports.formatters[format];
-      if ('function' === typeof formatter) {
-        var val = args[index];
-        match = formatter.call(self, val);
-
-        // now we need to remove `args[index]` since it's inlined in the `format`
-        args.splice(index, 1);
-        index--;
-      }
-      return match;
-    });
-
-    if ('function' === typeof exports.formatArgs) {
-      args = exports.formatArgs.apply(self, args);
-    }
-    var logFn = enabled.log || exports.log || console.log.bind(console);
-    logFn.apply(self, args);
-  }
-  enabled.enabled = true;
-
-  var fn = exports.enabled(namespace) ? enabled : disabled;
-
-  fn.namespace = namespace;
-
-  return fn;
-}
-
-/**
- * Enables a debug mode by namespaces. This can include modes
- * separated by a colon and wildcards.
- *
- * @param {String} namespaces
- * @api public
- */
-
-function enable(namespaces) {
-  exports.save(namespaces);
-
-  var split = (namespaces || '').split(/[\s,]+/);
-  var len = split.length;
-
-  for (var i = 0; i < len; i++) {
-    if (!split[i]) continue; // ignore empty strings
-    namespaces = split[i].replace(/\*/g, '.*?');
-    if (namespaces[0] === '-') {
-      exports.skips.push(new RegExp('^' + namespaces.substr(1) + '$'));
-    } else {
-      exports.names.push(new RegExp('^' + namespaces + '$'));
-    }
-  }
-}
-
-/**
- * Disable debug output.
- *
- * @api public
- */
-
-function disable() {
-  exports.enable('');
-}
-
-/**
- * Returns true if the given mode name is enabled, false otherwise.
- *
- * @param {String} name
- * @return {Boolean}
- * @api public
- */
-
-function enabled(name) {
-  var i, len;
-  for (i = 0, len = exports.skips.length; i < len; i++) {
-    if (exports.skips[i].test(name)) {
-      return false;
-    }
-  }
-  for (i = 0, len = exports.names.length; i < len; i++) {
-    if (exports.names[i].test(name)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Coerce `val`.
- *
- * @param {Mixed} val
- * @return {Mixed}
- * @api private
- */
-
-function coerce(val) {
-  if (val instanceof Error) return val.stack || val.message;
-  return val;
-}
-
-},{"ms":"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/debug/node_modules/ms/index.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/debug/node_modules/ms/index.js":[function(require,module,exports){
-/**
- * Helpers.
- */
-
-var s = 1000;
-var m = s * 60;
-var h = m * 60;
-var d = h * 24;
-var y = d * 365.25;
-
-/**
- * Parse or format the given `val`.
- *
- * Options:
- *
- *  - `long` verbose formatting [false]
- *
- * @param {String|Number} val
- * @param {Object} options
- * @return {String|Number}
- * @api public
- */
-
-module.exports = function(val, options){
-  options = options || {};
-  if ('string' == typeof val) return parse(val);
-  return options.long
-    ? long(val)
-    : short(val);
-};
-
-/**
- * Parse the given `str` and return milliseconds.
- *
- * @param {String} str
- * @return {Number}
- * @api private
- */
-
-function parse(str) {
-  var match = /^((?:\d+)?\.?\d+) *(ms|seconds?|s|minutes?|m|hours?|h|days?|d|years?|y)?$/i.exec(str);
-  if (!match) return;
-  var n = parseFloat(match[1]);
-  var type = (match[2] || 'ms').toLowerCase();
-  switch (type) {
-    case 'years':
-    case 'year':
-    case 'y':
-      return n * y;
-    case 'days':
-    case 'day':
-    case 'd':
-      return n * d;
-    case 'hours':
-    case 'hour':
-    case 'h':
-      return n * h;
-    case 'minutes':
-    case 'minute':
-    case 'm':
-      return n * m;
-    case 'seconds':
-    case 'second':
-    case 's':
-      return n * s;
-    case 'ms':
-      return n;
-  }
-}
-
-/**
- * Short format for `ms`.
- *
- * @param {Number} ms
- * @return {String}
- * @api private
- */
-
-function short(ms) {
-  if (ms >= d) return Math.round(ms / d) + 'd';
-  if (ms >= h) return Math.round(ms / h) + 'h';
-  if (ms >= m) return Math.round(ms / m) + 'm';
-  if (ms >= s) return Math.round(ms / s) + 's';
-  return ms + 'ms';
-}
-
-/**
- * Long format for `ms`.
- *
- * @param {Number} ms
- * @return {String}
- * @api private
- */
-
-function long(ms) {
-  return plural(ms, d, 'day')
-    || plural(ms, h, 'hour')
-    || plural(ms, m, 'minute')
-    || plural(ms, s, 'second')
-    || ms + ' ms';
-}
-
-/**
- * Pluralization helper.
- */
-
-function plural(ms, n, name) {
-  if (ms < n) return;
-  if (ms < n * 1.5) return Math.floor(ms / n) + ' ' + name;
-  return Math.ceil(ms / n) + ' ' + name + 's';
-}
-
-},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/extend.js/index.js":[function(require,module,exports){
-/**
- * Extend an object with another.
- *
- * @param {Object, ...} src, ...
- * @return {Object} merged
- * @api private
- */
-
-module.exports = function(src) {
-  var objs = [].slice.call(arguments, 1), obj;
-
-  for (var i = 0, len = objs.length; i < len; i++) {
-    obj = objs[i];
-    for (var prop in obj) {
-      src[prop] = obj[prop];
-    }
-  }
-
-  return src;
-}
-
-},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/hat/index.js":[function(require,module,exports){
-arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/hat/index.js"][0].apply(exports,arguments)
-},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/inherits/inherits_browser.js":[function(require,module,exports){
-if (typeof Object.create === 'function') {
-  // implementation from standard node.js 'util' module
-  module.exports = function inherits(ctor, superCtor) {
-    ctor.super_ = superCtor
-    ctor.prototype = Object.create(superCtor.prototype, {
-      constructor: {
-        value: ctor,
-        enumerable: false,
-        writable: true,
-        configurable: true
-      }
-    });
-  };
-} else {
-  // old school shim for old browsers
-  module.exports = function inherits(ctor, superCtor) {
-    ctor.super_ = superCtor
-    var TempCtor = function () {}
-    TempCtor.prototype = superCtor.prototype
-    ctor.prototype = new TempCtor()
-    ctor.prototype.constructor = ctor
-  }
-}
-
-},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/is-typedarray/index.js":[function(require,module,exports){
-module.exports      = isTypedArray
-isTypedArray.strict = isStrictTypedArray
-isTypedArray.loose  = isLooseTypedArray
-
-var toString = Object.prototype.toString
-var names = {
-    '[object Int8Array]': true
-  , '[object Int16Array]': true
-  , '[object Int32Array]': true
-  , '[object Uint8Array]': true
-  , '[object Uint16Array]': true
-  , '[object Uint32Array]': true
-  , '[object Float32Array]': true
-  , '[object Float64Array]': true
-}
-
-function isTypedArray(arr) {
-  return (
-       isStrictTypedArray(arr)
-    || isLooseTypedArray(arr)
-  )
-}
-
-function isStrictTypedArray(arr) {
-  return (
-       arr instanceof Int8Array
-    || arr instanceof Int16Array
-    || arr instanceof Int32Array
-    || arr instanceof Uint8Array
-    || arr instanceof Uint16Array
-    || arr instanceof Uint32Array
-    || arr instanceof Float32Array
-    || arr instanceof Float64Array
-  )
-}
-
-function isLooseTypedArray(arr) {
-  return names[toString.call(arr)]
-}
-
-},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/once/node_modules/wrappy/wrappy.js":[function(require,module,exports){
-// Returns a wrapper function that returns a wrapped callback
-// The wrapper function should do some stuff, and return a
-// presumably different callback function.
-// This makes sure that own properties are retained, so that
-// decorations and such are not lost along the way.
-module.exports = wrappy
-function wrappy (fn, cb) {
-  if (fn && cb) return wrappy(fn)(cb)
-
-  if (typeof fn !== 'function')
-    throw new TypeError('need wrapper function')
-
-  Object.keys(fn).forEach(function (k) {
-    wrapper[k] = fn[k]
-  })
-
-  return wrapper
-
-  function wrapper() {
-    var args = new Array(arguments.length)
-    for (var i = 0; i < args.length; i++) {
-      args[i] = arguments[i]
-    }
-    var ret = fn.apply(this, args)
-    var cb = args[args.length-1]
-    if (typeof ret === 'function' && ret !== cb) {
-      Object.keys(cb).forEach(function (k) {
-        ret[k] = cb[k]
-      })
-    }
-    return ret
-  }
-}
-
-},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/once/once.js":[function(require,module,exports){
-var wrappy = require('wrappy')
-module.exports = wrappy(once)
-
-once.proto = once(function () {
-  Object.defineProperty(Function.prototype, 'once', {
-    value: function () {
-      return once(this)
-    },
-    configurable: true
-  })
-})
-
-function once (fn) {
-  var f = function () {
-    if (f.called) return f.value
-    f.called = true
-    return f.value = fn.apply(this, arguments)
-  }
-  f.called = false
-  return f
-}
-
-},{"wrappy":"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/once/node_modules/wrappy/wrappy.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/typedarray-to-buffer/index.js":[function(require,module,exports){
-(function (Buffer){
-/**
- * Convert a typed array to a Buffer without a copy
- *
- * Author:   Feross Aboukhadijeh <feross@feross.org> <http://feross.org>
- * License:  MIT
- *
- * `npm install typedarray-to-buffer`
- */
-
-var isTypedArray = require('is-typedarray').strict
-
-module.exports = function (arr) {
-  // If `Buffer` is the browser `buffer` module, and the browser supports typed arrays,
-  // then avoid a copy. Otherwise, create a `Buffer` with a copy.
-  var constructor = Buffer.TYPED_ARRAY_SUPPORT
-    ? Buffer._augment
-    : function (arr) { return new Buffer(arr) }
-
-  if (arr instanceof Uint8Array) {
-    return constructor(arr)
-  } else if (arr instanceof ArrayBuffer) {
-    return constructor(new Uint8Array(arr))
-  } else if (isTypedArray(arr)) {
-    // Use the typed array's underlying ArrayBuffer to back new Buffer. This respects
-    // the "view" on the ArrayBuffer, i.e. byteOffset and byteLength. No copy.
-    return constructor(new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength))
-  } else {
-    // Unsupported type, just pass it through to the `Buffer` constructor.
-    return new Buffer(arr)
-  }
-}
-
-}).call(this,require("buffer").Buffer)
-},{"buffer":"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/buffer/index.js","is-typedarray":"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/is-typedarray/index.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/sniffr/src/sniffr.js":[function(require,module,exports){
+},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/sniffr/src/sniffr.js":[function(require,module,exports){
 (function(host) {
 
   var properties = {
@@ -14717,9 +14217,120 @@ function load() {
 exports.enable(load());
 
 },{"./debug":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/debug/debug.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/debug/debug.js":[function(require,module,exports){
-arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/debug/debug.js"][0].apply(exports,arguments)
+arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/debug/debug.js"][0].apply(exports,arguments)
 },{"ms":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/debug/node_modules/ms/index.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/debug/node_modules/ms/index.js":[function(require,module,exports){
-arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/debug/node_modules/ms/index.js"][0].apply(exports,arguments)
+/**
+ * Helpers.
+ */
+
+var s = 1000;
+var m = s * 60;
+var h = m * 60;
+var d = h * 24;
+var y = d * 365.25;
+
+/**
+ * Parse or format the given `val`.
+ *
+ * Options:
+ *
+ *  - `long` verbose formatting [false]
+ *
+ * @param {String|Number} val
+ * @param {Object} options
+ * @return {String|Number}
+ * @api public
+ */
+
+module.exports = function(val, options){
+  options = options || {};
+  if ('string' == typeof val) return parse(val);
+  return options.long
+    ? long(val)
+    : short(val);
+};
+
+/**
+ * Parse the given `str` and return milliseconds.
+ *
+ * @param {String} str
+ * @return {Number}
+ * @api private
+ */
+
+function parse(str) {
+  var match = /^((?:\d+)?\.?\d+) *(ms|seconds?|s|minutes?|m|hours?|h|days?|d|years?|y)?$/i.exec(str);
+  if (!match) return;
+  var n = parseFloat(match[1]);
+  var type = (match[2] || 'ms').toLowerCase();
+  switch (type) {
+    case 'years':
+    case 'year':
+    case 'y':
+      return n * y;
+    case 'days':
+    case 'day':
+    case 'd':
+      return n * d;
+    case 'hours':
+    case 'hour':
+    case 'h':
+      return n * h;
+    case 'minutes':
+    case 'minute':
+    case 'm':
+      return n * m;
+    case 'seconds':
+    case 'second':
+    case 's':
+      return n * s;
+    case 'ms':
+      return n;
+  }
+}
+
+/**
+ * Short format for `ms`.
+ *
+ * @param {Number} ms
+ * @return {String}
+ * @api private
+ */
+
+function short(ms) {
+  if (ms >= d) return Math.round(ms / d) + 'd';
+  if (ms >= h) return Math.round(ms / h) + 'h';
+  if (ms >= m) return Math.round(ms / m) + 'm';
+  if (ms >= s) return Math.round(ms / s) + 's';
+  return ms + 'ms';
+}
+
+/**
+ * Long format for `ms`.
+ *
+ * @param {Number} ms
+ * @return {String}
+ * @api private
+ */
+
+function long(ms) {
+  return plural(ms, d, 'day')
+    || plural(ms, h, 'hour')
+    || plural(ms, m, 'minute')
+    || plural(ms, s, 'second')
+    || ms + ' ms';
+}
+
+/**
+ * Pluralization helper.
+ */
+
+function plural(ms, n, name) {
+  if (ms < n) return;
+  if (ms < n * 1.5) return Math.floor(ms / n) + ' ' + name;
+  return Math.ceil(ms / n) + ' ' + name + 's';
+}
+
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/engine.io-parser/lib/browser.js":[function(require,module,exports){
 (function (global){
 /**
@@ -17658,7 +17269,7 @@ var parser = require('socket.io-parser')
 var toArray = require('to-array')
 var hasBin = require('has-binary')
 var bind = require('component-bind')
-var debug = require('debug')('socket.io-p2p')
+var debug = require('debug')('socket')
 var hat = require('hat')
 var extend = require('extend.js')
 
@@ -17704,7 +17315,7 @@ function Socketiop2p (opts, socket) {
         var peer = self._peers[offerId] = new Peer(peerOpts)
         peer.setMaxListeners(50)
         self.setupPeerEvents(peer)
-        peer.once('signal', function (offer) {
+        peer.on('signal', function (offer) {
           offers.push({
             offer: offer,
             offerId: offerId
@@ -17762,8 +17373,6 @@ function Socketiop2p (opts, socket) {
   })
 
   self.on('peer_ready', function (peer) {
-    console.log("Peer ready");
-    console.log(self._peers);
     self.readyPeers++
     if (self.readyPeers === self.numConnectedClients) {
       self.emit('ready')
@@ -17777,11 +17386,12 @@ Emitter(Socketiop2p.prototype)
 Socketiop2p.prototype.setupPeerEvents = function (peer) {
   var self = this
 
-  peer.on('ready', function (peer) {
+  peer.on('connect', function (peer) {
+    console.log("ready")
     self.emit('peer_ready', peer)
   })
 
-  peer.on('message', function (data) {
+  peer.on('data', function (data) {
     if (this.destroyed) return
     self.decoder.add(data)
   })
@@ -17821,7 +17431,10 @@ Socketiop2p.prototype.emit = function (data, cb) {
       } else if (encodedPackets) {
         for (var i = 0; i < encodedPackets.length; i++) {
           for (var peerId in self._peers) {
-            self._peers[peerId].send(encodedPackets[i])
+            var peer = self._peers[peerId]
+            if (peer._channelReady) {
+              peer.send(encodedPackets[i])
+            }
           }
         }
       } else {
@@ -17869,323 +17482,711 @@ Socketiop2p.prototype.disconnect = function () {
 
 module.exports = Socketiop2p
 
-},{"component-bind":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/component-bind/index.js","component-emitter":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/component-emitter/index.js","debug":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/debug/browser.js","extend.js":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/extend.js/index.js","has-binary":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/index.js","hat":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/hat/index.js","simple-peer":"/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/index.js","socket.io-parser":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/index.js","to-array":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/to-array/index.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/component-bind/index.js":[function(require,module,exports){
+},{"component-bind":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/component-bind/index.js","component-emitter":"/Users/tom/code/socket-io/p2p-snake/node_modules/component-emitter/index.js","debug":"/Users/tom/code/socket-io/p2p-snake/node_modules/debug/browser.js","extend.js":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/extend.js/index.js","has-binary":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/index.js","hat":"/Users/tom/code/socket-io/p2p-snake/node_modules/hat/index.js","simple-peer":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/simple-peer/index.js","socket.io-parser":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/index.js","to-array":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/to-array/index.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/component-bind/index.js":[function(require,module,exports){
 arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/component-bind/index.js"][0].apply(exports,arguments)
-},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/component-emitter/index.js":[function(require,module,exports){
-arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/component-emitter/index.js"][0].apply(exports,arguments)
-},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/debug/browser.js":[function(require,module,exports){
-
+},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/extend.js/index.js":[function(require,module,exports){
 /**
- * This is the web browser implementation of `debug()`.
+ * Extend an object with another.
  *
- * Expose `debug()` as the module.
- */
-
-exports = module.exports = require('./debug');
-exports.log = log;
-exports.formatArgs = formatArgs;
-exports.save = save;
-exports.load = load;
-exports.useColors = useColors;
-
-/**
- * Use chrome.storage.local if we are in an app
- */
-
-var storage;
-
-if (typeof chrome !== 'undefined' && typeof chrome.storage !== 'undefined')
-  storage = chrome.storage.local;
-else
-  storage = localstorage();
-
-/**
- * Colors.
- */
-
-exports.colors = [
-  'lightseagreen',
-  'forestgreen',
-  'goldenrod',
-  'dodgerblue',
-  'darkorchid',
-  'crimson'
-];
-
-/**
- * Currently only WebKit-based Web Inspectors, Firefox >= v31,
- * and the Firebug extension (any Firefox version) are known
- * to support "%c" CSS customizations.
- *
- * TODO: add a `localStorage` variable to explicitly enable/disable colors
- */
-
-function useColors() {
-  // is webkit? http://stackoverflow.com/a/16459606/376773
-  return ('WebkitAppearance' in document.documentElement.style) ||
-    // is firebug? http://stackoverflow.com/a/398120/376773
-    (window.console && (console.firebug || (console.exception && console.table))) ||
-    // is firefox >= v31?
-    // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
-    (navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31);
-}
-
-/**
- * Map %j to `JSON.stringify()`, since no Web Inspectors do that by default.
- */
-
-exports.formatters.j = function(v) {
-  return JSON.stringify(v);
-};
-
-
-/**
- * Colorize log arguments if enabled.
- *
- * @api public
- */
-
-function formatArgs() {
-  var args = arguments;
-  var useColors = this.useColors;
-
-  args[0] = (useColors ? '%c' : '')
-    + this.namespace
-    + (useColors ? ' %c' : ' ')
-    + args[0]
-    + (useColors ? '%c ' : ' ')
-    + '+' + exports.humanize(this.diff);
-
-  if (!useColors) return args;
-
-  var c = 'color: ' + this.color;
-  args = [args[0], c, 'color: inherit'].concat(Array.prototype.slice.call(args, 1));
-
-  // the final "%c" is somewhat tricky, because there could be other
-  // arguments passed either before or after the %c, so we need to
-  // figure out the correct index to insert the CSS into
-  var index = 0;
-  var lastC = 0;
-  args[0].replace(/%[a-z%]/g, function(match) {
-    if ('%%' === match) return;
-    index++;
-    if ('%c' === match) {
-      // we only are interested in the *last* %c
-      // (the user may have provided their own)
-      lastC = index;
-    }
-  });
-
-  args.splice(lastC, 0, c);
-  return args;
-}
-
-/**
- * Invokes `console.log()` when available.
- * No-op when `console.log` is not a "function".
- *
- * @api public
- */
-
-function log() {
-  // this hackery is required for IE8/9, where
-  // the `console.log` function doesn't have 'apply'
-  return 'object' === typeof console
-    && console.log
-    && Function.prototype.apply.call(console.log, console, arguments);
-}
-
-/**
- * Save `namespaces`.
- *
- * @param {String} namespaces
+ * @param {Object, ...} src, ...
+ * @return {Object} merged
  * @api private
  */
 
-function save(namespaces) {
-  try {
-    if (null == namespaces) {
-      storage.removeItem('debug');
+module.exports = function(src) {
+  var objs = [].slice.call(arguments, 1), obj;
+
+  for (var i = 0, len = objs.length; i < len; i++) {
+    obj = objs[i];
+    for (var prop in obj) {
+      src[prop] = obj[prop];
+    }
+  }
+
+  return src;
+}
+
+},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/index.js":[function(require,module,exports){
+arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/has-binary/index.js"][0].apply(exports,arguments)
+},{"isarray":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/node_modules/isarray/index.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/node_modules/isarray/index.js":[function(require,module,exports){
+arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/socket.io-parser/node_modules/isarray/index.js"][0].apply(exports,arguments)
+},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/simple-peer/index.js":[function(require,module,exports){
+(function (Buffer){
+/* global Blob */
+
+module.exports = Peer
+
+var debug = require('debug')('simple-peer')
+var hat = require('hat')
+var inherits = require('inherits')
+var isTypedArray = require('is-typedarray')
+var once = require('once')
+var stream = require('stream')
+var toBuffer = require('typedarray-to-buffer')
+
+inherits(Peer, stream.Duplex)
+
+/**
+ * WebRTC peer connection. Same API as node core `net.Socket`, plus a few extra methods.
+ * Duplex stream.
+ * @param {Object} opts
+ */
+function Peer (opts) {
+  var self = this
+  if (!(self instanceof Peer)) return new Peer(opts)
+  self._debug('new peer %o', opts)
+
+  if (!opts) opts = {}
+  opts.allowHalfOpen = false
+  if (opts.highWaterMark == null) opts.highWaterMark = 1024 * 1024
+
+  stream.Duplex.call(self, opts)
+
+  self.initiator = opts.initiator || false
+  self.channelConfig = opts.channelConfig || Peer.channelConfig
+  self.channelName = opts.channelName || hat(160)
+  if (!opts.initiator) self.channelName = null
+  self.config = opts.config || Peer.config
+  self.constraints = opts.constraints || Peer.constraints
+  self.reconnectTimer = opts.reconnectTimer || 0
+  self.sdpTransform = opts.sdpTransform || function (sdp) { return sdp }
+  self.stream = opts.stream || false
+  self.trickle = opts.trickle !== undefined ? opts.trickle : true
+
+  self.destroyed = false
+  self.connected = false
+
+  // so Peer object always has same shape (V8 optimization)
+  self.remoteAddress = undefined
+  self.remoteFamily = undefined
+  self.remotePort = undefined
+  self.localAddress = undefined
+  self.localPort = undefined
+
+  self._wrtc = opts.wrtc || getBrowserRTC()
+  if (!self._wrtc) {
+    if (typeof window === 'undefined') {
+      throw new Error('No WebRTC support: Specify `opts.wrtc` option in this environment')
     } else {
-      storage.debug = namespaces;
+      throw new Error('No WebRTC support: Not a supported browser')
     }
-  } catch(e) {}
+  }
+
+  self._maxBufferedAmount = opts.highWaterMark
+  self._pcReady = false
+  self._channelReady = false
+  self._iceComplete = false // ice candidate trickle done (got null candidate)
+  self._channel = null
+
+  self._chunk = null
+  self._cb = null
+  self._interval = null
+  self._reconnectTimeout = null
+
+  self._pc = new (self._wrtc.RTCPeerConnection)(self.config, self.constraints)
+  self._pc.oniceconnectionstatechange = self._onIceConnectionStateChange.bind(self)
+  self._pc.onsignalingstatechange = self._onSignalingStateChange.bind(self)
+  self._pc.onicecandidate = self._onIceCandidate.bind(self)
+
+  if (self.stream) self._pc.addStream(self.stream)
+  self._pc.onaddstream = self._onAddStream.bind(self)
+
+  if (self.initiator) {
+    self._setupData({ channel: self._pc.createDataChannel(self.channelName, self.channelConfig) })
+    self._pc.onnegotiationneeded = once(self._createOffer.bind(self))
+    // Only Chrome triggers "negotiationneeded"; this is a workaround for other
+    // implementations
+    if (typeof window === 'undefined' || !window.webkitRTCPeerConnection) {
+      self._pc.onnegotiationneeded()
+    }
+  } else {
+    self._pc.ondatachannel = self._setupData.bind(self)
+  }
+
+  self.on('finish', function () {
+    if (self.connected) {
+      // When local peer is finished writing, close connection to remote peer.
+      // Half open connections are currently not supported.
+      // Wait a bit before destroying so the datachannel flushes.
+      // TODO: is there a more reliable way to accomplish this?
+      setTimeout(function () {
+        self._destroy()
+      }, 100)
+    } else {
+      // If data channel is not connected when local peer is finished writing, wait until
+      // data is flushed to network at "connect" event.
+      // TODO: is there a more reliable way to accomplish this?
+      self.once('connect', function () {
+        setTimeout(function () {
+          self._destroy()
+        }, 100)
+      })
+    }
+  })
 }
 
-/**
- * Load `namespaces`.
- *
- * @return {String} returns the previously persisted debug modes
- * @api private
- */
+Peer.WEBRTC_SUPPORT = !!getBrowserRTC()
 
-function load() {
-  var r;
-  try {
-    r = storage.debug;
-  } catch(e) {}
-  return r;
+/**
+ * Expose config, constraints, and data channel config for overriding all Peer
+ * instances. Otherwise, just set opts.config, opts.constraints, or opts.channelConfig
+ * when constructing a Peer.
+ */
+Peer.config = {
+  iceServers: [
+    {
+      url: 'stun:23.21.150.121', // deprecated, replaced by `urls`
+      urls: 'stun:23.21.150.121'
+    }
+  ]
+}
+Peer.constraints = {}
+Peer.channelConfig = {}
+
+Object.defineProperty(Peer.prototype, 'bufferSize', {
+  get: function () {
+    var self = this
+    return (self._channel && self._channel.bufferedAmount) || 0
+  }
+})
+
+Peer.prototype.address = function () {
+  var self = this
+  return { port: self.localPort, family: 'IPv4', address: self.localAddress }
 }
 
-/**
- * Enable namespaces listed in `localStorage.debug` initially.
- */
-
-exports.enable(load());
-
-/**
- * Localstorage attempts to return the localstorage.
- *
- * This is necessary because safari throws
- * when a user disables cookies/localstorage
- * and you attempt to access it.
- *
- * @return {LocalStorage}
- * @api private
- */
-
-function localstorage(){
-  try {
-    return window.localStorage;
-  } catch (e) {}
-}
-
-},{"./debug":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/debug/debug.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/debug/debug.js":[function(require,module,exports){
-arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/debug/debug.js"][0].apply(exports,arguments)
-},{"ms":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/debug/node_modules/ms/index.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/debug/node_modules/ms/index.js":[function(require,module,exports){
-/**
- * Helpers.
- */
-
-var s = 1000;
-var m = s * 60;
-var h = m * 60;
-var d = h * 24;
-var y = d * 365.25;
-
-/**
- * Parse or format the given `val`.
- *
- * Options:
- *
- *  - `long` verbose formatting [false]
- *
- * @param {String|Number} val
- * @param {Object} options
- * @return {String|Number}
- * @api public
- */
-
-module.exports = function(val, options){
-  options = options || {};
-  if ('string' == typeof val) return parse(val);
-  return options.long
-    ? long(val)
-    : short(val);
-};
-
-/**
- * Parse the given `str` and return milliseconds.
- *
- * @param {String} str
- * @return {Number}
- * @api private
- */
-
-function parse(str) {
-  var match = /^((?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|years?|yrs?|y)?$/i.exec(str);
-  if (!match) return;
-  var n = parseFloat(match[1]);
-  var type = (match[2] || 'ms').toLowerCase();
-  switch (type) {
-    case 'years':
-    case 'year':
-    case 'yrs':
-    case 'yr':
-    case 'y':
-      return n * y;
-    case 'days':
-    case 'day':
-    case 'd':
-      return n * d;
-    case 'hours':
-    case 'hour':
-    case 'hrs':
-    case 'hr':
-    case 'h':
-      return n * h;
-    case 'minutes':
-    case 'minute':
-    case 'mins':
-    case 'min':
-    case 'm':
-      return n * m;
-    case 'seconds':
-    case 'second':
-    case 'secs':
-    case 'sec':
-    case 's':
-      return n * s;
-    case 'milliseconds':
-    case 'millisecond':
-    case 'msecs':
-    case 'msec':
-    case 'ms':
-      return n;
+Peer.prototype.signal = function (data) {
+  var self = this
+  if (self.destroyed) throw new Error('cannot signal after peer is destroyed')
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data)
+    } catch (err) {
+      data = {}
+    }
+  }
+  self._debug('signal()')
+  if (data.sdp) {
+    self._pc.setRemoteDescription(new (self._wrtc.RTCSessionDescription)(data), function () {
+      if (self.destroyed) return
+      if (self._pc.remoteDescription.type === 'offer') self._createAnswer()
+    }, self._onError.bind(self))
+  }
+  if (data.candidate) {
+    try {
+      self._pc.addIceCandidate(
+        new (self._wrtc.RTCIceCandidate)(data.candidate), noop, self._onError.bind(self)
+      )
+    } catch (err) {
+      self._destroy(new Error('error adding candidate: ' + err.message))
+    }
+  }
+  if (!data.sdp && !data.candidate) {
+    self._destroy(new Error('signal() called with invalid signal data'))
   }
 }
 
 /**
- * Short format for `ms`.
- *
- * @param {Number} ms
- * @return {String}
- * @api private
+ * Send text/binary data to the remote peer.
+ * @param {TypedArrayView|ArrayBuffer|Buffer|string|Blob|Object} chunk
  */
+Peer.prototype.send = function (chunk) {
+  var self = this
 
-function short(ms) {
-  if (ms >= d) return Math.round(ms / d) + 'd';
-  if (ms >= h) return Math.round(ms / h) + 'h';
-  if (ms >= m) return Math.round(ms / m) + 'm';
-  if (ms >= s) return Math.round(ms / s) + 's';
-  return ms + 'ms';
+  if (!isTypedArray.strict(chunk) && !(chunk instanceof ArrayBuffer) &&
+    !Buffer.isBuffer(chunk) && typeof chunk !== 'string' &&
+    (typeof Blob === 'undefined' || !(chunk instanceof Blob))) {
+    chunk = JSON.stringify(chunk)
+  }
+
+  // `wrtc` module doesn't accept node.js buffer
+  if (Buffer.isBuffer(chunk) && !isTypedArray.strict(chunk)) {
+    chunk = new Uint8Array(chunk)
+  }
+
+  var len = chunk.length || chunk.byteLength || chunk.size
+  self._channel.send(chunk)
+  self._debug('write: %d bytes', len)
 }
 
+Peer.prototype.destroy = function (onclose) {
+  var self = this
+  self._destroy(null, onclose)
+}
+
+Peer.prototype._destroy = function (err, onclose) {
+  var self = this
+  if (self.destroyed) return
+  if (onclose) self.once('close', onclose)
+
+  self._debug('destroy (error: %s)', err && err.message)
+
+  self.readable = self.writable = false
+
+  if (!self._readableState.ended) self.push(null)
+  if (!self._writableState.finished) self.end()
+
+  self.destroyed = true
+  self.connected = false
+  self._pcReady = false
+  self._channelReady = false
+
+  self._chunk = null
+  self._cb = null
+  clearInterval(self._interval)
+  clearTimeout(self._reconnectTimeout)
+
+  if (self._pc) {
+    try {
+      self._pc.close()
+    } catch (err) {}
+
+    self._pc.oniceconnectionstatechange = null
+    self._pc.onsignalingstatechange = null
+    self._pc.onicecandidate = null
+  }
+
+  if (self._channel) {
+    try {
+      self._channel.close()
+    } catch (err) {}
+
+    self._channel.onmessage = null
+    self._channel.onopen = null
+    self._channel.onclose = null
+  }
+  self._pc = null
+  self._channel = null
+
+  if (err) self.emit('error', err)
+  self.emit('close')
+}
+
+Peer.prototype._setupData = function (event) {
+  var self = this
+  self._channel = event.channel
+  self.channelName = self._channel.label
+
+  self._channel.binaryType = 'arraybuffer'
+  self._channel.onmessage = self._onChannelMessage.bind(self)
+  self._channel.onopen = self._onChannelOpen.bind(self)
+  self._channel.onclose = self._onChannelClose.bind(self)
+}
+
+Peer.prototype._read = function () {}
+
+Peer.prototype._write = function (chunk, encoding, cb) {
+  var self = this
+  if (self.destroyed) return cb(new Error('cannot write after peer is destroyed'))
+
+  if (self.connected) {
+    self.send(chunk)
+    if (self._channel.bufferedAmount > self._maxBufferedAmount) {
+      self._debug('start backpressure: bufferedAmount %d', self._channel.bufferedAmount)
+      self._cb = cb
+    } else {
+      cb(null)
+    }
+  } else {
+    self._debug('write before connect')
+    self._chunk = chunk
+    self._cb = cb
+  }
+}
+
+Peer.prototype._createOffer = function () {
+  var self = this
+  if (self.destroyed) return
+
+  self._pc.createOffer(function (offer) {
+    if (self.destroyed) return
+    speedHack(offer)
+    offer.sdp = self.sdpTransform(offer.sdp)
+    self._pc.setLocalDescription(offer, noop, self._onError.bind(self))
+    var sendOffer = function () {
+      self._debug('signal')
+      self.emit('signal', self._pc.localDescription || offer)
+    }
+    if (self.trickle || self._iceComplete) sendOffer()
+    else self.once('_iceComplete', sendOffer) // wait for candidates
+  }, self._onError.bind(self), self.offerConstraints)
+}
+
+Peer.prototype._createAnswer = function () {
+  var self = this
+  if (self.destroyed) return
+
+  self._pc.createAnswer(function (answer) {
+    if (self.destroyed) return
+    speedHack(answer)
+    answer.sdp = self.sdpTransform(answer.sdp)
+    self._pc.setLocalDescription(answer, noop, self._onError.bind(self))
+    var sendAnswer = function () {
+      self._debug('signal')
+      self.emit('signal', self._pc.localDescription || answer)
+    }
+    if (self.trickle || self._iceComplete) sendAnswer()
+    else self.once('_iceComplete', sendAnswer)
+  }, self._onError.bind(self), self.answerConstraints)
+}
+
+Peer.prototype._onIceConnectionStateChange = function () {
+  var self = this
+  if (self.destroyed) return
+  var iceGatheringState = self._pc.iceGatheringState
+  var iceConnectionState = self._pc.iceConnectionState
+  self._debug('iceConnectionStateChange %s %s', iceGatheringState, iceConnectionState)
+  self.emit('iceConnectionStateChange', iceGatheringState, iceConnectionState)
+  if (iceConnectionState === 'connected' || iceConnectionState === 'completed') {
+    clearTimeout(self._reconnectTimeout)
+    self._pcReady = true
+    self._maybeReady()
+  }
+  if (iceConnectionState === 'disconnected') {
+    if (self.reconnectTimer) {
+      // If user has set `opt.reconnectTimer`, allow time for ICE to attempt a reconnect
+      clearTimeout(self._reconnectTimeout)
+      self._reconnectTimeout = setTimeout(function () {
+        self._destroy()
+      }, self.reconnectTimer)
+    } else {
+      self._destroy()
+    }
+  }
+  if (iceConnectionState === 'closed') {
+    self._destroy()
+  }
+}
+
+Peer.prototype._maybeReady = function () {
+  var self = this
+  self._debug('maybeReady pc %s channel %s', self._pcReady, self._channelReady)
+  if (self.connected || self._connecting || !self._pcReady || !self._channelReady) return
+  self._connecting = true
+
+  if (typeof window !== 'undefined' && !!window.mozRTCPeerConnection) {
+    self._pc.getStats(null, function (res) {
+      var items = []
+      res.forEach(function (item) {
+        items.push(item)
+      })
+      onStats(items)
+    }, self._onError.bind(self))
+  } else {
+    self._pc.getStats(function (res) {
+      var items = []
+      res.result().forEach(function (result) {
+        var item = {}
+        result.names().forEach(function (name) {
+          item[name] = result.stat(name)
+        })
+        item.id = result.id
+        item.type = result.type
+        item.timestamp = result.timestamp
+        items.push(item)
+      })
+      onStats(items)
+    })
+  }
+
+  function onStats (items) {
+    items.forEach(function (item) {
+      if (item.type === 'remotecandidate') {
+        self.remoteAddress = item.ipAddress
+        self.remoteFamily = 'IPv4'
+        self.remotePort = Number(item.portNumber)
+        self._debug(
+          'connect remote: %s:%s (%s)',
+          self.remoteAddress, self.remotePort, self.remoteFamily
+        )
+      } else if (item.type === 'localcandidate' && item.candidateType === 'host') {
+        self.localAddress = item.ipAddress
+        self.localPort = Number(item.portNumber)
+        self._debug('connect local: %s:%s', self.localAddress, self.localPort)
+      }
+    })
+
+    self._connecting = false
+    self.connected = true
+
+    if (self._chunk) {
+      self.send(self._chunk)
+      self._chunk = null
+      self._debug('sent chunk from "write before connect"')
+
+      var cb = self._cb
+      self._cb = null
+      cb(null)
+    }
+
+    self._interval = setInterval(function () {
+      if (!self._cb || !self._channel || self._channel.bufferedAmount > self._maxBufferedAmount) return
+      self._debug('ending backpressure: bufferedAmount %d', self._channel.bufferedAmount)
+      var cb = self._cb
+      self._cb = null
+      cb(null)
+    }, 150)
+    if (self._interval.unref) self._interval.unref()
+
+    self._debug('connect')
+    self.emit('connect')
+  }
+}
+
+Peer.prototype._onSignalingStateChange = function () {
+  var self = this
+  if (self.destroyed) return
+  self._debug('signalingStateChange %s', self._pc.signalingState)
+  self.emit('signalingStateChange', self._pc.signalingState)
+}
+
+Peer.prototype._onIceCandidate = function (event) {
+  var self = this
+  if (self.destroyed) return
+  if (event.candidate && self.trickle) {
+    self.emit('signal', { candidate: event.candidate })
+  } else if (!event.candidate) {
+    self._iceComplete = true
+    self.emit('_iceComplete')
+  }
+}
+
+Peer.prototype._onChannelMessage = function (event) {
+  var self = this
+  if (self.destroyed) return
+  var data = event.data
+  self._debug('read: %d bytes', data.byteLength || data.length)
+
+  if (data instanceof ArrayBuffer) {
+    data = toBuffer(new Uint8Array(data))
+    self.push(data)
+  } else {
+    try {
+      data = JSON.parse(data)
+    } catch (err) {}
+    self.emit('data', data)
+  }
+}
+
+Peer.prototype._onChannelOpen = function () {
+  var self = this
+  if (self.connected || self.destroyed) return
+  self._debug('on channel open')
+  self._channelReady = true
+  self._maybeReady()
+}
+
+Peer.prototype._onChannelClose = function () {
+  var self = this
+  if (self.destroyed) return
+  self._debug('on channel close')
+  self._destroy()
+}
+
+Peer.prototype._onAddStream = function (event) {
+  var self = this
+  if (self.destroyed) return
+  self._debug('on add stream')
+  self.emit('stream', event.stream)
+}
+
+Peer.prototype._onError = function (err) {
+  var self = this
+  if (self.destroyed) return
+  self._debug('error %s', err.message || err)
+  self._destroy(err)
+}
+
+Peer.prototype._debug = function () {
+  var self = this
+  var args = [].slice.call(arguments)
+  var id = self.channelName && self.channelName.substring(0, 7)
+  args[0] = '[' + id + '] ' + args[0]
+  debug.apply(null, args)
+}
+
+function getBrowserRTC () {
+  if (typeof window === 'undefined') return null
+  var wrtc = {
+    RTCPeerConnection: window.mozRTCPeerConnection || window.RTCPeerConnection ||
+      window.webkitRTCPeerConnection,
+    RTCSessionDescription: window.mozRTCSessionDescription ||
+      window.RTCSessionDescription || window.webkitRTCSessionDescription,
+    RTCIceCandidate: window.mozRTCIceCandidate || window.RTCIceCandidate ||
+      window.webkitRTCIceCandidate
+  }
+  if (!wrtc.RTCPeerConnection) return null
+  return wrtc
+}
+
+function speedHack (obj) {
+  var s = obj.sdp.split('b=AS:30')
+  if (s.length > 1) obj.sdp = s[0] + 'b=AS:1638400' + s[1]
+}
+
+function noop () {}
+
+}).call(this,require("buffer").Buffer)
+},{"buffer":"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/buffer/index.js","debug":"/Users/tom/code/socket-io/p2p-snake/node_modules/debug/browser.js","hat":"/Users/tom/code/socket-io/p2p-snake/node_modules/hat/index.js","inherits":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/simple-peer/node_modules/inherits/inherits_browser.js","is-typedarray":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/simple-peer/node_modules/is-typedarray/index.js","once":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/simple-peer/node_modules/once/once.js","stream":"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/stream-browserify/index.js","typedarray-to-buffer":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/simple-peer/node_modules/typedarray-to-buffer/index.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/simple-peer/node_modules/inherits/inherits_browser.js":[function(require,module,exports){
+if (typeof Object.create === 'function') {
+  // implementation from standard node.js 'util' module
+  module.exports = function inherits(ctor, superCtor) {
+    ctor.super_ = superCtor
+    ctor.prototype = Object.create(superCtor.prototype, {
+      constructor: {
+        value: ctor,
+        enumerable: false,
+        writable: true,
+        configurable: true
+      }
+    });
+  };
+} else {
+  // old school shim for old browsers
+  module.exports = function inherits(ctor, superCtor) {
+    ctor.super_ = superCtor
+    var TempCtor = function () {}
+    TempCtor.prototype = superCtor.prototype
+    ctor.prototype = new TempCtor()
+    ctor.prototype.constructor = ctor
+  }
+}
+
+},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/simple-peer/node_modules/is-typedarray/index.js":[function(require,module,exports){
+module.exports      = isTypedArray
+isTypedArray.strict = isStrictTypedArray
+isTypedArray.loose  = isLooseTypedArray
+
+var toString = Object.prototype.toString
+var names = {
+    '[object Int8Array]': true
+  , '[object Int16Array]': true
+  , '[object Int32Array]': true
+  , '[object Uint8Array]': true
+  , '[object Uint16Array]': true
+  , '[object Uint32Array]': true
+  , '[object Float32Array]': true
+  , '[object Float64Array]': true
+}
+
+function isTypedArray(arr) {
+  return (
+       isStrictTypedArray(arr)
+    || isLooseTypedArray(arr)
+  )
+}
+
+function isStrictTypedArray(arr) {
+  return (
+       arr instanceof Int8Array
+    || arr instanceof Int16Array
+    || arr instanceof Int32Array
+    || arr instanceof Uint8Array
+    || arr instanceof Uint16Array
+    || arr instanceof Uint32Array
+    || arr instanceof Float32Array
+    || arr instanceof Float64Array
+  )
+}
+
+function isLooseTypedArray(arr) {
+  return names[toString.call(arr)]
+}
+
+},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/simple-peer/node_modules/once/node_modules/wrappy/wrappy.js":[function(require,module,exports){
+// Returns a wrapper function that returns a wrapped callback
+// The wrapper function should do some stuff, and return a
+// presumably different callback function.
+// This makes sure that own properties are retained, so that
+// decorations and such are not lost along the way.
+module.exports = wrappy
+function wrappy (fn, cb) {
+  if (fn && cb) return wrappy(fn)(cb)
+
+  if (typeof fn !== 'function')
+    throw new TypeError('need wrapper function')
+
+  Object.keys(fn).forEach(function (k) {
+    wrapper[k] = fn[k]
+  })
+
+  return wrapper
+
+  function wrapper() {
+    var args = new Array(arguments.length)
+    for (var i = 0; i < args.length; i++) {
+      args[i] = arguments[i]
+    }
+    var ret = fn.apply(this, args)
+    var cb = args[args.length-1]
+    if (typeof ret === 'function' && ret !== cb) {
+      Object.keys(cb).forEach(function (k) {
+        ret[k] = cb[k]
+      })
+    }
+    return ret
+  }
+}
+
+},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/simple-peer/node_modules/once/once.js":[function(require,module,exports){
+var wrappy = require('wrappy')
+module.exports = wrappy(once)
+
+once.proto = once(function () {
+  Object.defineProperty(Function.prototype, 'once', {
+    value: function () {
+      return once(this)
+    },
+    configurable: true
+  })
+})
+
+function once (fn) {
+  var f = function () {
+    if (f.called) return f.value
+    f.called = true
+    return f.value = fn.apply(this, arguments)
+  }
+  f.called = false
+  return f
+}
+
+},{"wrappy":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/simple-peer/node_modules/once/node_modules/wrappy/wrappy.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/simple-peer/node_modules/typedarray-to-buffer/index.js":[function(require,module,exports){
+(function (Buffer){
 /**
- * Long format for `ms`.
+ * Convert a typed array to a Buffer without a copy
  *
- * @param {Number} ms
- * @return {String}
- * @api private
+ * Author:   Feross Aboukhadijeh <feross@feross.org> <http://feross.org>
+ * License:  MIT
+ *
+ * `npm install typedarray-to-buffer`
  */
 
-function long(ms) {
-  return plural(ms, d, 'day')
-    || plural(ms, h, 'hour')
-    || plural(ms, m, 'minute')
-    || plural(ms, s, 'second')
-    || ms + ' ms';
+var isTypedArray = require('is-typedarray').strict
+
+module.exports = function (arr) {
+  // If `Buffer` is the browser `buffer` module, and the browser supports typed arrays,
+  // then avoid a copy. Otherwise, create a `Buffer` with a copy.
+  var constructor = Buffer.TYPED_ARRAY_SUPPORT
+    ? Buffer._augment
+    : function (arr) { return new Buffer(arr) }
+
+  if (arr instanceof Uint8Array) {
+    return constructor(arr)
+  } else if (arr instanceof ArrayBuffer) {
+    return constructor(new Uint8Array(arr))
+  } else if (isTypedArray(arr)) {
+    // Use the typed array's underlying ArrayBuffer to back new Buffer. This respects
+    // the "view" on the ArrayBuffer, i.e. byteOffset and byteLength. No copy.
+    return constructor(new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength))
+  } else {
+    // Unsupported type, just pass it through to the `Buffer` constructor.
+    return new Buffer(arr)
+  }
 }
 
-/**
- * Pluralization helper.
- */
-
-function plural(ms, n, name) {
-  if (ms < n) return;
-  if (ms < n * 1.5) return Math.floor(ms / n) + ' ' + name;
-  return Math.ceil(ms / n) + ' ' + name + 's';
-}
-
-},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/extend.js/index.js":[function(require,module,exports){
-arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/extend.js/index.js"][0].apply(exports,arguments)
-},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/index.js":[function(require,module,exports){
-arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/has-binary/index.js"][0].apply(exports,arguments)
-},{"isarray":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/node_modules/isarray/index.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/node_modules/isarray/index.js":[function(require,module,exports){
-arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/has-binary/node_modules/isarray/index.js"][0].apply(exports,arguments)
-},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/hat/index.js":[function(require,module,exports){
-arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/hat/index.js"][0].apply(exports,arguments)
-},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/binary.js":[function(require,module,exports){
+}).call(this,require("buffer").Buffer)
+},{"buffer":"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/buffer/index.js","is-typedarray":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/simple-peer/node_modules/is-typedarray/index.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/binary.js":[function(require,module,exports){
 arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/socket.io-parser/binary.js"][0].apply(exports,arguments)
 },{"./is-buffer":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/is-buffer.js","isarray":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/node_modules/isarray/index.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/index.js":[function(require,module,exports){
 
@@ -18610,7 +18611,7 @@ arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/node_modules/debug/debug.js":[function(require,module,exports){
 arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/debug/debug.js"][0].apply(exports,arguments)
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/node_modules/isarray/index.js":[function(require,module,exports){
-arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/has-binary/node_modules/isarray/index.js"][0].apply(exports,arguments)
+arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/node_modules/isarray/index.js"][0].apply(exports,arguments)
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/node_modules/json3/lib/json3.js":[function(require,module,exports){
 arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/socket.io-parser/node_modules/json3/lib/json3.js"][0].apply(exports,arguments)
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/to-array/index.js":[function(require,module,exports){
@@ -22034,9 +22035,9 @@ function isUndefined(arg) {
 }
 
 },{}],"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/inherits/inherits_browser.js":[function(require,module,exports){
-arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/inherits/inherits_browser.js"][0].apply(exports,arguments)
+arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/simple-peer/node_modules/inherits/inherits_browser.js"][0].apply(exports,arguments)
 },{}],"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/isarray/index.js":[function(require,module,exports){
-arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/has-binary/node_modules/isarray/index.js"][0].apply(exports,arguments)
+arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/node_modules/isarray/index.js"][0].apply(exports,arguments)
 },{}],"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/process/browser.js":[function(require,module,exports){
 // shim for using process in browser
 
