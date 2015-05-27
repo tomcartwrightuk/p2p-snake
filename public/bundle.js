@@ -1,4 +1,55 @@
-(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({"/Users/tom/code/socket-io/p2p-snake/lib/js/index.js":[function(require,module,exports){
+(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({"/Users/tom/code/socket-io/p2p-snake/lib/js/controls.js":[function(require,module,exports){
+var defaultDir = "right"
+module.exports.direction = defaultDir
+var $ = require('jquery');
+var directionRules = {
+  up: 'down',
+  left: 'right',
+  right: 'left',
+  down: 'up'
+}
+
+module.exports.setup = function() {
+  var self = this;
+
+  $(document).keydown(function(e) {
+    var key = e.which;
+    var d;
+    switch(key) {
+      case 37:
+        d = "left";
+        break;
+      case 38:
+        d = "up"
+        break;
+      case 39:
+        d = "right";
+        break;
+      case 40:
+        d = "down";
+    }
+    setDirection(d)
+  })
+
+  $('.control-wrapper').on('click', function(e) {
+    var d = module.exports.direction
+    var newD = $(this).context.id;
+    setDirection(newD)
+  })
+}
+
+module.exports.reset = function() {
+  module.exports.direction = defaultDir;
+}
+
+function setDirection(newD) {
+  var d = module.exports.direction
+  if (d !== directionRules[newD]) {
+    module.exports.direction = newD;
+  }
+}
+
+},{"jquery":"/Users/tom/code/socket-io/p2p-snake/node_modules/jquery/dist/jquery.js"}],"/Users/tom/code/socket-io/p2p-snake/lib/js/index.js":[function(require,module,exports){
 var Socketiop2p = require('socket.io-p2p')
 var io = require('socket.io-client')
 var Snake = require('./snake');
@@ -152,6 +203,9 @@ var s = new Sniffr();
 s.sniff(navigator.useragent);
 var browser = s.browser.name;
 var LatencyCalc = require('./latency_calc');
+var controls = require('./controls');
+controls.setup();
+
 /*
 * Snake game code inspired from
 * http://thecodeplayer.com/walkthrough/html5-game-tutorial-make-a-snake-game-using-html5-canvas-jquery
@@ -167,7 +221,6 @@ var SnakeGame = function(socket, initiator, snakes) {
   // Canvas stuff
   var self = this;
   this.snakes = snakes
-  console.log(this.snakes);
   this.mySnake = snakes[0]
   this.mySnake.setMySnakeColor()
   this.canvas = $("#canvas")[0];
@@ -185,20 +238,17 @@ var SnakeGame = function(socket, initiator, snakes) {
     }
   })
   this.loopTime = 100;
-  this.d;
   this.food;
   this.currentLatency = '--';
 
   this.init = function() {
     // TODO move to snake module
-    self.d = "right"; //default direction
+    controls.reset();
     self.mySnake.createSnake();
 
     // paint every loopTime ms
     if (self.initiator) {
-      console.log("init claled");
       self.createFood(); //Now we can see the food particle
-      console.log('Gmae loop %', self.game_loop);
       if (typeof self.game_loop != "undefined") clearInterval(self.game_loop);
       self.game_loop = setInterval(
         self.paint.bind(self)
@@ -245,10 +295,11 @@ SnakeGame.prototype.paint = function() {
 
   // These were the position of the head cell.
   // increment it to get the new head position
-  if (this.d == "right") nx++;
-  else if(this.d == "left") nx--;
-  else if(this.d == "up") ny--;
-  else if(this.d == "down") ny++;
+  var direction = controls.direction
+  if (direction == "right") nx++;
+  else if(direction == "left") nx--;
+  else if(direction == "up") ny--;
+  else if(direction == "down") ny++;
 
   // This will restart the game if the snake hits the wall or it's body
   if (this.collisionOccurred(nx, ny)) {
@@ -323,14 +374,6 @@ SnakeGame.prototype.checkCollision = function(x, y, array) {
 }
 
 SnakeGame.prototype.setupKeyListeners = function() {
-  var self = this;
-  $(document).keydown(function(e) {
-    var key = e.which;
-    if (key == "37" && self.d != "right") self.d = "left";
-    else if (key == "38" && self.d != "down") self.d = "up";
-    else if (key == "39" && self.d != "left") self.d = "right";
-    else if (key == "40" && self.d != "up") self.d = "down";
-  })
 }
 
 SnakeGame.prototype.collisionOccurred = function(nx, ny) {
@@ -412,7 +455,7 @@ SnakeGame.prototype.setupCanvas = function () {
 
 module.exports = SnakeGame;
 
-},{"./latency_calc":"/Users/tom/code/socket-io/p2p-snake/lib/js/latency_calc.js","jquery":"/Users/tom/code/socket-io/p2p-snake/node_modules/jquery/dist/jquery.js","sniffr":"/Users/tom/code/socket-io/p2p-snake/node_modules/sniffr/src/sniffr.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/component-emitter/index.js":[function(require,module,exports){
+},{"./controls":"/Users/tom/code/socket-io/p2p-snake/lib/js/controls.js","./latency_calc":"/Users/tom/code/socket-io/p2p-snake/lib/js/latency_calc.js","jquery":"/Users/tom/code/socket-io/p2p-snake/node_modules/jquery/dist/jquery.js","sniffr":"/Users/tom/code/socket-io/p2p-snake/node_modules/sniffr/src/sniffr.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/component-emitter/index.js":[function(require,module,exports){
 
 /**
  * Expose `Emitter`.
@@ -18185,8 +18228,15 @@ module.exports = function (arr) {
   }
 }
 
-}).call(this,require("buffer").Buffer)
-},{"buffer":"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/buffer/index.js","is-typedarray":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/simple-peer/node_modules/is-typedarray/index.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/binary.js":[function(require,module,exports){
+},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/extend.js/index.js":[function(require,module,exports){
+arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/extend.js/index.js"][0].apply(exports,arguments)
+},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/index.js":[function(require,module,exports){
+arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/has-binary/index.js"][0].apply(exports,arguments)
+},{"isarray":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/node_modules/isarray/index.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/node_modules/isarray/index.js":[function(require,module,exports){
+arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/socket.io-parser/node_modules/isarray/index.js"][0].apply(exports,arguments)
+},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/hat/index.js":[function(require,module,exports){
+arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/simple-peer/node_modules/hat/index.js"][0].apply(exports,arguments)
+},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/binary.js":[function(require,module,exports){
 arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/socket.io-parser/binary.js"][0].apply(exports,arguments)
 },{"./is-buffer":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/is-buffer.js","isarray":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/node_modules/isarray/index.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/index.js":[function(require,module,exports){
 
