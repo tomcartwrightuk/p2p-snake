@@ -30,7 +30,6 @@ io.on('connection', function(socket) {
   p2pserver(socket, null, room)
 
   socket.on('disconnect', function () {
-    delete clients[socket.id]
     room.players.splice(room.players.indexOf(socket), 1)
     removeRoom(room)
     io.to(room.name).emit('disconnected-player')
@@ -46,11 +45,30 @@ io.on('connection', function(socket) {
   })
 
   socket.on('message', function (data) {
+    console.log("Message");
     var players = room.players.filter(function (player) {
       return player !== socket
     })
     players.forEach(function (player) {
       player.emit('message', data)
+    })
+  })
+
+  socket.on('ping', function (data) {
+    var players = room.players.filter(function (player) {
+      return player !== socket
+    })
+    players.forEach(function (player) {
+      player.emit('ping', data)
+    })
+  })
+
+  socket.on('pong', function (data) {
+    var players = room.players.filter(function (player) {
+      return player !== socket
+    })
+    players.forEach(function (player) {
+      player.emit('pong', data)
     })
   })
 
