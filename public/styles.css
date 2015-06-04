@@ -1,53 +1,60 @@
 #mobile-controls {
-  width: 300px;
-  height: 50px;
-  position: fixed;
-  bottom: 50px;
-  margin: 0 0 0 -75px;
-  left: 50%;
+  display: none;
 }
 #up div {
   width: 0;
   height: 0;
-  border-left:    15px solid transparent;
-  border-right:   15px solid transparent;
-  border-bottom:  25px solid black;
+  border-left:    45px solid transparent;
+  border-right:   45px solid transparent;
+  border-bottom:  75px solid black;
 }
 #down div {
   width: 0;
   height: 0;
-  border-left:    15px solid transparent;
-  border-right:   15px solid transparent;
-  border-top:  25px solid black;
+  border-left:    45px solid transparent;
+  border-right:   45px solid transparent;
+  border-top:  75px solid black;
 }
 #left div {
   width: 0;
   height: 0;
-  border-top:    15px solid transparent;
-  border-bottom:  15px solid transparent;
-  border-right:   25px solid black;
+  border-top:    45px solid transparent;
+  border-bottom:  45px solid transparent;
+  border-right:   75px solid black;
 }
 #right div {
   width: 0;
   height: 0;
-  border-top:    15px solid transparent;
-  border-bottom:  15px solid transparent;
-  border-left:   25px solid black;
+  border-top:    45px solid transparent;
+  border-bottom:  45px solid transparent;
+  border-left:   75px solid black;
 }
 .control-wrapper {
-  padding: 10px 10px 10px 10px;
-  border-radius: 5px;
-  margin-left: 10px;
+  border-radius: 8px;
   background-color: #2F2F2F;
   opacity: 0.7;
-  width: 30px;
-  height: 30px;
+  width: 90px;
+  height: 90px;
   cursor: pointer;
   margin-top: 10px;
 }
 .control-col {
   float: left;
 }
-.mid-control {
-  margin-top: -25px;
+.control-group {
+  height: 240px;
+  position: fixed;
+  bottom: 50px;
+}
+.left-control {
+  left: 30px;
+}
+.right-control {
+  right: 30px;
+}
+#up, #down {
+  padding: 15px 10px 5px 10px;
+}
+#right, #left {
+  padding: 10px 5px 10px 15px;
 }

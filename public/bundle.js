@@ -56,7 +56,10 @@ var Snake = require('./snake');
 var SnakeGame = require('./snake_game');
 var $ = require('jquery');
 var peerOpts = {numClients: 1}
+var isMobile = require('./mobile_detect')
+var LatencyCalc = require('./latency_calc');
 var initiator
+var latencyCalc
 var snakeGame
 var snake1
 var snake2
@@ -64,6 +67,10 @@ var snake2
 var manager = io.Manager();
 var socket = manager.socket('/')
 var p2psocket = new Socketiop2p(peerOpts, socket)
+
+if (isMobile()) {
+  $('#mobile-controls').show();
+}
 
 socket.on('waiting', function (data) {
   loadGame()
@@ -78,10 +85,18 @@ p2psocket.on('begin-game', function(data) {
   snake1 = new Snake(initiator)
   snake2 = new Snake()
   snakeGame = new SnakeGame(p2psocket, initiator, [snake1, snake2])
+  latencyCalc = new LatencyCalc(socket)
+  latencyCalc.on('ping-update', function(data) {
+    snakeGame.currentLatency = data
+  })
 })
 
 p2psocket.on('ready', function () {
   p2psocket.useSockets = false
+  latencyCalc = new LatencyCalc(p2psocket)
+  latencyCalc.on('ping-update', function(data) {
+    snakeGame.currentLatency = data
+  })
 })
 
 p2psocket.on('disconnected-player', function () {
@@ -107,7 +122,7 @@ function loadGame () {
   $('#canvas-wrapper').show()
 }
 
-},{"./snake":"/Users/tom/code/socket-io/p2p-snake/lib/js/snake.js","./snake_game":"/Users/tom/code/socket-io/p2p-snake/lib/js/snake_game.js","jquery":"/Users/tom/code/socket-io/p2p-snake/node_modules/jquery/dist/jquery.js","socket.io-client":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/index.js","socket.io-p2p":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/index.js"}],"/Users/tom/code/socket-io/p2p-snake/lib/js/latency_calc.js":[function(require,module,exports){
+},{"./latency_calc":"/Users/tom/code/socket-io/p2p-snake/lib/js/latency_calc.js","./mobile_detect":"/Users/tom/code/socket-io/p2p-snake/lib/js/mobile_detect.js","./snake":"/Users/tom/code/socket-io/p2p-snake/lib/js/snake.js","./snake_game":"/Users/tom/code/socket-io/p2p-snake/lib/js/snake_game.js","jquery":"/Users/tom/code/socket-io/p2p-snake/node_modules/jquery/dist/jquery.js","socket.io-client":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/index.js","socket.io-p2p":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/index.js"}],"/Users/tom/code/socket-io/p2p-snake/lib/js/latency_calc.js":[function(require,module,exports){
 var Emitter = require('component-emitter')
 var hat = require('hat')
 var _ = require('underscore')
@@ -135,9 +150,19 @@ LatencyCalc.prototype.addPong = function(data) {
   var numPongs = Object.keys(this.pongs).length
   if (numPongs === 10) {
     var totalTime = _.reduce(this.pongs, function (total, pong, key) {
-                      return total + (pong - self.pings[key])
+      // console.log('pong %s', pong);
+      // console.log('ping %s', self.pings[key]);
+      // console.log("");
+                      if (self.pings[key] !== undefined) {
+                        return total + (pong - self.pings[key])
+                      } else {
+                        return total
+                      }
                     }, 0);
+    // console.log('totaltime %', totalTime);
+    // console.log('numpongs %', numPongs);
     var avTime = ((totalTime / numPongs) / 2).toFixed(2)
+    // console.log('av time %', avTime);
     this.pings = {}
     this.pongs = {}
     this.emit('ping-update', avTime)
@@ -159,7 +184,22 @@ Emitter(LatencyCalc.prototype)
 
 module.exports = LatencyCalc
 
-},{"component-emitter":"/Users/tom/code/socket-io/p2p-snake/node_modules/component-emitter/index.js","hat":"/Users/tom/code/socket-io/p2p-snake/node_modules/hat/index.js","underscore":"/Users/tom/code/socket-io/p2p-snake/node_modules/underscore/underscore.js"}],"/Users/tom/code/socket-io/p2p-snake/lib/js/snake.js":[function(require,module,exports){
+},{"component-emitter":"/Users/tom/code/socket-io/p2p-snake/node_modules/component-emitter/index.js","hat":"/Users/tom/code/socket-io/p2p-snake/node_modules/hat/index.js","underscore":"/Users/tom/code/socket-io/p2p-snake/node_modules/underscore/underscore.js"}],"/Users/tom/code/socket-io/p2p-snake/lib/js/mobile_detect.js":[function(require,module,exports){
+'use strict';
+
+/**
+ * Returns whether browser is a mobile or not. Tests for touch support
+ *
+ * @returns {boolean} True if mobile.
+ */
+module.exports = function () {
+  if (('ontouchstart' in window) || navigator.msMaxTouchPoints) {
+    return true;
+  }
+};
+
+
+},{}],"/Users/tom/code/socket-io/p2p-snake/lib/js/snake.js":[function(require,module,exports){
 var Snake = function(initiator) {
   this.initiator = initiator;
   this.score = 0;
@@ -202,7 +242,6 @@ var Sniffr = require('sniffr');
 var s = new Sniffr();
 s.sniff(navigator.useragent);
 var browser = s.browser.name;
-var LatencyCalc = require('./latency_calc');
 var controls = require('./controls');
 controls.setup();
 
@@ -229,7 +268,6 @@ var SnakeGame = function(socket, initiator, snakes) {
   this.setupCanvas();
   this.socket = socket;
   this.socket.on('message', function(msg) {
-    console.log('Message %s', msg);
     if (msg.type === 'snake_arr') {
       self.snakes[1].snake_arr = msg.data
       self.snakes[1].score = msg.score
@@ -256,7 +294,6 @@ var SnakeGame = function(socket, initiator, snakes) {
     }
   }
   this.showIntro = function(players, cb) {
-    console.log('PLayers %s', players);
     this.resetCanvas()
     this.ctx.fillStyle = "#DDDDDD"
     this.ctx.font = "bold 18px sans-serif"
@@ -439,10 +476,6 @@ SnakeGame.prototype.setupBoldText = function () {
 
 SnakeGame.prototype.setupLatencyCalc = function () {
   var self = this
-  var latencyCalc = new LatencyCalc(this.socket)
-  latencyCalc.on('ping-update', function(data) {
-    self.currentLatency = data
-  })
 }
 
 SnakeGame.prototype.setupCanvas = function () {
@@ -455,7 +488,7 @@ SnakeGame.prototype.setupCanvas = function () {
 
 module.exports = SnakeGame;
 
-},{"./controls":"/Users/tom/code/socket-io/p2p-snake/lib/js/controls.js","./latency_calc":"/Users/tom/code/socket-io/p2p-snake/lib/js/latency_calc.js","jquery":"/Users/tom/code/socket-io/p2p-snake/node_modules/jquery/dist/jquery.js","sniffr":"/Users/tom/code/socket-io/p2p-snake/node_modules/sniffr/src/sniffr.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/component-emitter/index.js":[function(require,module,exports){
+},{"./controls":"/Users/tom/code/socket-io/p2p-snake/lib/js/controls.js","jquery":"/Users/tom/code/socket-io/p2p-snake/node_modules/jquery/dist/jquery.js","sniffr":"/Users/tom/code/socket-io/p2p-snake/node_modules/sniffr/src/sniffr.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/component-emitter/index.js":[function(require,module,exports){
 
 /**
  * Expose `Emitter`.
@@ -17430,7 +17463,6 @@ Socketiop2p.prototype.setupPeerEvents = function (peer) {
   var self = this
 
   peer.on('connect', function (peer) {
-    console.log("ready")
     self.emit('peer_ready', peer)
   })
 
@@ -17843,12 +17875,15 @@ Peer.prototype._createOffer = function () {
 
   self._pc.createOffer(function (offer) {
     if (self.destroyed) return
-    speedHack(offer)
     offer.sdp = self.sdpTransform(offer.sdp)
     self._pc.setLocalDescription(offer, noop, self._onError.bind(self))
     var sendOffer = function () {
+      var signal = self._pc.localDescription || offer
       self._debug('signal')
-      self.emit('signal', self._pc.localDescription || offer)
+      self.emit('signal', {
+        type: signal.type,
+        sdp: signal.sdp
+      })
     }
     if (self.trickle || self._iceComplete) sendOffer()
     else self.once('_iceComplete', sendOffer) // wait for candidates
@@ -17861,12 +17896,15 @@ Peer.prototype._createAnswer = function () {
 
   self._pc.createAnswer(function (answer) {
     if (self.destroyed) return
-    speedHack(answer)
     answer.sdp = self.sdpTransform(answer.sdp)
     self._pc.setLocalDescription(answer, noop, self._onError.bind(self))
     var sendAnswer = function () {
+      var signal = self._pc.localDescription || answer
       self._debug('signal')
-      self.emit('signal', self._pc.localDescription || answer)
+      self.emit('signal', {
+        type: signal.type,
+        sdp: signal.sdp
+      })
     }
     if (self.trickle || self._iceComplete) sendAnswer()
     else self.once('_iceComplete', sendAnswer)
@@ -17987,7 +18025,13 @@ Peer.prototype._onIceCandidate = function (event) {
   var self = this
   if (self.destroyed) return
   if (event.candidate && self.trickle) {
-    self.emit('signal', { candidate: event.candidate })
+    self.emit('signal', {
+      candidate: {
+        candidate: event.candidate.candidate,
+        sdpMLineIndex: event.candidate.sdpMLineIndex,
+        sdpMid: event.candidate.sdpMid
+      }
+    })
   } else if (!event.candidate) {
     self._iceComplete = true
     self.emit('_iceComplete')
@@ -18062,11 +18106,6 @@ function getBrowserRTC () {
   return wrtc
 }
 
-function speedHack (obj) {
-  var s = obj.sdp.split('b=AS:30')
-  if (s.length > 1) obj.sdp = s[0] + 'b=AS:1638400' + s[1]
-}
-
 function noop () {}
 
 }).call(this,require("buffer").Buffer)
@@ -18106,6 +18145,7 @@ var names = {
   , '[object Int16Array]': true
   , '[object Int32Array]': true
   , '[object Uint8Array]': true
+  , '[object Uint8ClampedArray]': true
   , '[object Uint16Array]': true
   , '[object Uint32Array]': true
   , '[object Float32Array]': true
@@ -18125,6 +18165,7 @@ function isStrictTypedArray(arr) {
     || arr instanceof Int16Array
     || arr instanceof Int32Array
     || arr instanceof Uint8Array
+    || arr instanceof Uint8ClampedArray
     || arr instanceof Uint16Array
     || arr instanceof Uint32Array
     || arr instanceof Float32Array
