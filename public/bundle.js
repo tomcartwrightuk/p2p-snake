@@ -140,7 +140,7 @@ var LatencyCalc = function(socket) {
   })
   setInterval(function() {
     self.createPing()
-  }, 200)
+  }, 500)
 }
 
 LatencyCalc.prototype.addPong = function(data) {
@@ -150,19 +150,13 @@ LatencyCalc.prototype.addPong = function(data) {
   var numPongs = Object.keys(this.pongs).length
   if (numPongs === 10) {
     var totalTime = _.reduce(this.pongs, function (total, pong, key) {
-      // console.log('pong %s', pong);
-      // console.log('ping %s', self.pings[key]);
-      // console.log("");
                       if (self.pings[key] !== undefined) {
                         return total + (pong - self.pings[key])
                       } else {
                         return total
                       }
                     }, 0);
-    // console.log('totaltime %', totalTime);
-    // console.log('numpongs %', numPongs);
     var avTime = ((totalTime / numPongs) / 2).toFixed(2)
-    // console.log('av time %', avTime);
     this.pings = {}
     this.pongs = {}
     this.emit('ping-update', avTime)
@@ -296,7 +290,7 @@ var SnakeGame = function(socket, initiator, snakes) {
   this.showIntro = function(players, cb) {
     this.resetCanvas()
     this.ctx.fillStyle = "#DDDDDD"
-    this.ctx.font = "bold 18px sans-serif"
+    this.ctx.font = "bold 14px sans-serif"
     if (players) {
       var text = 'OPPONENT JOINED. STARTING IN:'
       var textOffset = (this.w / 2) - (this.ctx.measureText(text).width / 2)
@@ -374,7 +368,7 @@ SnakeGame.prototype.paint = function() {
     var opponent_score =  "THEM: " + this.snakes[1].score;
     this.ctx.fillText(opponent_score, textWidth + 60, this.h-15);
     var statusBarText = 'initiator: ' + this.initiator + '     UA: ' + browser + '     PING ' + this.currentLatency + ' ms' + '     P2P: ' + !this.socket.useSockets;
-    this.ctx.fillText(statusBarText, this.w - 350, this.h-15);
+    this.ctx.fillText(statusBarText, this.w - 400, this.h-15);
   }
 }
 
@@ -465,7 +459,7 @@ SnakeGame.prototype.renderIntroText = function (text, offset) {
 }
 
 SnakeGame.prototype.setupBottomText = function () {
-  this.ctx.font = "18px sans-serif"
+  this.ctx.font = "14px sans-serif"
   this.ctx.fillStyle = "#BBBBBB"
 }
 
@@ -17348,6 +17342,7 @@ var bind = require('component-bind')
 var debug = require('debug')('socket')
 var hat = require('hat')
 var extend = require('extend.js')
+var rtcSupport = require('webrtcsupport')
 
 var emitfn = Emitter.prototype.emit
 
@@ -17372,13 +17367,15 @@ function Socketiop2p (opts, socket) {
   socket.on('numClients', function (numClients) {
     self.peerId = socket.io.engine.id
     self.numConnectedClients = numClients
-    generateOffers(function (offers) {
-      var offerObj = {
-        offers: offers,
-        fromPeerId: self.peerId
-      }
-      socket.emit('offers', offerObj)
-    })
+    if (rtcSupport.supportDataChannel) {
+      generateOffers(function (offers) {
+        var offerObj = {
+          offers: offers,
+          fromPeerId: self.peerId
+        }
+        socket.emit('offers', offerObj)
+      })
+    }
 
     function generateOffers (cb) {
       var offers = []
@@ -17463,6 +17460,7 @@ Socketiop2p.prototype.setupPeerEvents = function (peer) {
   var self = this
 
   peer.on('connect', function (peer) {
+    console.log("ready")
     self.emit('peer_ready', peer)
   })
 
@@ -17557,7 +17555,7 @@ Socketiop2p.prototype.disconnect = function () {
 
 module.exports = Socketiop2p
 
-},{"component-bind":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/component-bind/index.js","component-emitter":"/Users/tom/code/socket-io/p2p-snake/node_modules/component-emitter/index.js","debug":"/Users/tom/code/socket-io/p2p-snake/node_modules/debug/browser.js","extend.js":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/extend.js/index.js","has-binary":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/index.js","hat":"/Users/tom/code/socket-io/p2p-snake/node_modules/hat/index.js","simple-peer":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/simple-peer/index.js","socket.io-parser":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/index.js","to-array":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/to-array/index.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/component-bind/index.js":[function(require,module,exports){
+},{"component-bind":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/component-bind/index.js","component-emitter":"/Users/tom/code/socket-io/p2p-snake/node_modules/component-emitter/index.js","debug":"/Users/tom/code/socket-io/p2p-snake/node_modules/debug/browser.js","extend.js":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/extend.js/index.js","has-binary":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/index.js","hat":"/Users/tom/code/socket-io/p2p-snake/node_modules/hat/index.js","simple-peer":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/simple-peer/index.js","socket.io-parser":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/index.js","to-array":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/to-array/index.js","webrtcsupport":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/webrtcsupport/index-browser.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/component-bind/index.js":[function(require,module,exports){
 arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/component-bind/index.js"][0].apply(exports,arguments)
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/extend.js/index.js":[function(require,module,exports){
 /**
@@ -18700,6 +18698,53 @@ arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/
 arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/socket.io-parser/node_modules/json3/lib/json3.js"][0].apply(exports,arguments)
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/to-array/index.js":[function(require,module,exports){
 arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/to-array/index.js"][0].apply(exports,arguments)
+},{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/webrtcsupport/index-browser.js":[function(require,module,exports){
+// created by @HenrikJoreteg
+var prefix;
+var version;
+
+if (window.mozRTCPeerConnection || navigator.mozGetUserMedia) {
+    prefix = 'moz';
+    version = parseInt(navigator.userAgent.match(/Firefox\/([0-9]+)\./)[1], 10);
+} else if (window.webkitRTCPeerConnection || navigator.webkitGetUserMedia) {
+    prefix = 'webkit';
+    version = navigator.userAgent.match(/Chrom(e|ium)/) && parseInt(navigator.userAgent.match(/Chrom(e|ium)\/([0-9]+)\./)[2], 10);
+}
+
+var PC = window.mozRTCPeerConnection || window.webkitRTCPeerConnection;
+var IceCandidate = window.mozRTCIceCandidate || window.RTCIceCandidate;
+var SessionDescription = window.mozRTCSessionDescription || window.RTCSessionDescription;
+var MediaStream = window.webkitMediaStream || window.MediaStream;
+var screenSharing = window.location.protocol === 'https:' &&
+    ((prefix === 'webkit' && version >= 26) ||
+     (prefix === 'moz' && version >= 33))
+var AudioContext = window.AudioContext || window.webkitAudioContext;
+var videoEl = document.createElement('video');
+var supportVp8 = videoEl && videoEl.canPlayType && videoEl.canPlayType('video/webm; codecs="vp8", vorbis') === "probably";
+var getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.msGetUserMedia || navigator.mozGetUserMedia;
+
+// export support flags and constructors.prototype && PC
+module.exports = {
+    prefix: prefix,
+    browserVersion: version,
+    support: !!PC && supportVp8 && !!getUserMedia,
+    // new support style
+    supportRTCPeerConnection: !!PC,
+    supportVp8: supportVp8,
+    supportGetUserMedia: !!getUserMedia,
+    supportDataChannel: !!(PC && PC.prototype && PC.prototype.createDataChannel),
+    supportWebAudio: !!(AudioContext && AudioContext.prototype.createMediaStreamSource),
+    supportMediaStream: !!(MediaStream && MediaStream.prototype.removeTrack),
+    supportScreenSharing: !!screenSharing,
+    // constructors
+    AudioContext: AudioContext,
+    PeerConnection: PC,
+    SessionDescription: SessionDescription,
+    IceCandidate: IceCandidate,
+    MediaStream: MediaStream,
+    getUserMedia: getUserMedia
+};
+
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/underscore/underscore.js":[function(require,module,exports){
 //     Underscore.js 1.8.3
 //     http://underscorejs.org
