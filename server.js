@@ -45,7 +45,6 @@ io.on('connection', function(socket) {
   })
 
   socket.on('message', function (data) {
-    console.log("Message");
     var players = room.players.filter(function (player) {
       return player !== socket
     })
