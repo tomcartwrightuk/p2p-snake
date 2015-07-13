@@ -64,7 +64,7 @@ var snakeGame
 var snake1
 var snake2
 
-var manager = io.Manager();
+var manager = io.Manager({ transports: ['websocket'] });
 var socket = manager.socket('/')
 var p2psocket = new Socketiop2p(peerOpts, socket)
 
@@ -92,7 +92,7 @@ p2psocket.on('begin-game', function(data) {
 })
 
 p2psocket.on('ready', function () {
-  p2psocket.useSockets = false
+  p2psocket.usePeerConnection = true
   latencyCalc = new LatencyCalc(p2psocket)
   latencyCalc.on('ping-update', function(data) {
     snakeGame.currentLatency = data
@@ -367,7 +367,7 @@ SnakeGame.prototype.paint = function() {
   if (this.snakes.length > 1) {
     var opponent_score =  "THEM: " + this.snakes[1].score;
     this.ctx.fillText(opponent_score, textWidth + 60, this.h-15);
-    var statusBarText = 'initiator: ' + this.initiator + '     UA: ' + browser + '     PING ' + this.currentLatency + ' ms' + '     P2P: ' + !this.socket.useSockets;
+    var statusBarText = 'initiator: ' + this.initiator + '     UA: ' + browser + '     PING ' + this.currentLatency + ' ms' + '     P2P: ' + this.socket.usePeerConnection;
     this.ctx.fillText(statusBarText, this.w - 400, this.h-15);
   }
 }
@@ -419,8 +419,8 @@ SnakeGame.prototype.collisionOccurred = function(nx, ny) {
 }
 
 SnakeGame.prototype.checkSnakeCollisions = function(nx, ny) {
-  for (var i = 0; i < this.snakes; i++) {
-    if (this.checkCollision(nx, ny, this.snakes[i])) return true
+  for (var i = 0; i < this.snakes.length; i++) {
+    if (this.checkCollision(nx, ny, this.snakes[i].snake_arr)) return true
   }
 }
 
@@ -16452,7 +16452,7 @@ function isBuf(obj) {
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/socket.io-parser/node_modules/isarray/index.js":[function(require,module,exports){
-arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/engine.io-parser/node_modules/has-binary/node_modules/isarray/index.js"][0].apply(exports,arguments)
+arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/has-binary/node_modules/isarray/index.js"][0].apply(exports,arguments)
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/socket.io-parser/node_modules/json3/lib/json3.js":[function(require,module,exports){
 /*! JSON v3.2.6 | http://bestiejs.github.io/json3 | Copyright 2012-2013, Kit Cambridge | http://kit.mit-license.org */
 ;(function (window) {
@@ -17332,7 +17332,7 @@ function toArray(list, index) {
 }
 
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/index.js":[function(require,module,exports){
-window.myDebug = require("debug");
+window.myDebug = require("debug")
 var Peer = require('simple-peer')
 var Emitter = require('component-emitter')
 var parser = require('socket.io-parser')
@@ -17349,6 +17349,7 @@ var emitfn = Emitter.prototype.emit
 function Socketiop2p (opts, socket) {
   var self = this
   self.useSockets = true
+  self.usePeerConnection = false
   self.decoder = new parser.Decoder(this)
   self.decoder.on('decoded', bind(this, this.ondecoded))
   self.socket = socket
@@ -17490,9 +17491,7 @@ Socketiop2p.prototype.emit = function (data, cb) {
 
   if (this._peerEvents.hasOwnProperty(data) || argsObj.fromSocket) {
     emitfn.apply(this, arguments)
-  } else if (this.useSockets) {
-    this.socket.emit(data, cb)
-  } else {
+  } else if (this.usePeerConnection || !this.useSockets) {
     var args = toArray(arguments)
     var parserType = parser.EVENT // default
     if (hasBin(args)) { parserType = parser.BINARY_EVENT } // binary
@@ -17514,6 +17513,8 @@ Socketiop2p.prototype.emit = function (data, cb) {
         throw new Error('Encoding error')
       }
     })
+  } else {
+    this.socket.emit(data, cb)
   }
 }
 
@@ -17582,7 +17583,7 @@ module.exports = function(src) {
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/index.js":[function(require,module,exports){
 arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/has-binary/index.js"][0].apply(exports,arguments)
 },{"isarray":"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/node_modules/isarray/index.js"}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/node_modules/isarray/index.js":[function(require,module,exports){
-arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/engine.io-parser/node_modules/has-binary/node_modules/isarray/index.js"][0].apply(exports,arguments)
+arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/has-binary/node_modules/isarray/index.js"][0].apply(exports,arguments)
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/simple-peer/index.js":[function(require,module,exports){
 (function (Buffer){
 /* global Blob */
@@ -18693,7 +18694,7 @@ arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/node_modules/debug/debug.js":[function(require,module,exports){
 arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/debug/debug.js"][0].apply(exports,arguments)
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/node_modules/isarray/index.js":[function(require,module,exports){
-arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/engine.io-parser/node_modules/has-binary/node_modules/isarray/index.js"][0].apply(exports,arguments)
+arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/has-binary/node_modules/isarray/index.js"][0].apply(exports,arguments)
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/node_modules/json3/lib/json3.js":[function(require,module,exports){
 arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/socket.io-parser/node_modules/json3/lib/json3.js"][0].apply(exports,arguments)
 },{}],"/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/to-array/index.js":[function(require,module,exports){
@@ -22166,7 +22167,7 @@ function isUndefined(arg) {
 },{}],"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/inherits/inherits_browser.js":[function(require,module,exports){
 arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/simple-peer/node_modules/inherits/inherits_browser.js"][0].apply(exports,arguments)
 },{}],"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/isarray/index.js":[function(require,module,exports){
-arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/engine.io-parser/node_modules/has-binary/node_modules/isarray/index.js"][0].apply(exports,arguments)
+arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-client/node_modules/has-binary/node_modules/isarray/index.js"][0].apply(exports,arguments)
 },{}],"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/process/browser.js":[function(require,module,exports){
 // shim for using process in browser
 
