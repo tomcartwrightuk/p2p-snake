@@ -367,7 +367,7 @@ SnakeGame.prototype.paint = function() {
   if (this.snakes.length > 1) {
     var opponent_score =  "THEM: " + this.snakes[1].score;
     this.ctx.fillText(opponent_score, textWidth + 60, this.h-15);
-    var statusBarText = 'initiator: ' + this.initiator + '     UA: ' + browser + '     PING ' + this.currentLatency + ' ms' + '     P2P: ' + !this.socket.useSockets;
+    var statusBarText = 'initiator: ' + this.initiator + '     UA: ' + browser + '     PING ' + this.currentLatency + ' ms' + '     P2P: ' + this.socket.usePeerConnection;
     this.ctx.fillText(statusBarText, this.w - 400, this.h-15);
   }
 }
@@ -22167,7 +22167,7 @@ function isUndefined(arg) {
 },{}],"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/inherits/inherits_browser.js":[function(require,module,exports){
 arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/simple-peer/node_modules/inherits/inherits_browser.js"][0].apply(exports,arguments)
 },{}],"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/isarray/index.js":[function(require,module,exports){
-arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/has-binary/node_modules/isarray/index.js"][0].apply(exports,arguments)
+arguments[4]["/Users/tom/code/socket-io/p2p-snake/node_modules/socket.io-p2p/node_modules/socket.io-parser/node_modules/isarray/index.js"][0].apply(exports,arguments)
 },{}],"/usr/local/lib/node_modules/watchify/node_modules/browserify/node_modules/process/browser.js":[function(require,module,exports){
 // shim for using process in browser
 
