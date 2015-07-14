@@ -13,18 +13,20 @@ module.exports.setup = function() {
   var self = this;
 
   $(document).keydown(function(e) {
-    e.preventDefault();
     var key = e.which;
     var d;
     switch(key) {
       case 37:
         d = "left";
+        e.preventDefault();
         break;
       case 38:
         d = "up"
+        e.preventDefault();
         break;
       case 39:
         d = "right";
+        e.preventDefault();
         break;
       case 40:
         d = "down";
