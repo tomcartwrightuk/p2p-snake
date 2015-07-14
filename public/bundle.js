@@ -13,6 +13,7 @@ module.exports.setup = function() {
   var self = this;
 
   $(document).keydown(function(e) {
+    e.preventDefault();
     var key = e.which;
     var d;
     switch(key) {
