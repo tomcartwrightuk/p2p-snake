@@ -73,6 +73,7 @@ if (isMobile()) {
 }
 
 socket.on('waiting', function (data) {
+  console.log("Waiting");
   loadGame()
   singlePlayerGame()
 })

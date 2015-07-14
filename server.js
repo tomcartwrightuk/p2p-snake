@@ -73,6 +73,7 @@ io.on('connection', function(socket) {
   })
 
   if (room.playerCount === 1) {
+    console.log("Waiting player");
     socket.emit('waiting')
   } else {
     socket.emit('begin-game', true)
