@@ -30,6 +30,7 @@ module.exports.setup = function() {
         break;
       case 40:
         d = "down";
+        e.preventDefault();
     }
     setDirection(d)
   })
